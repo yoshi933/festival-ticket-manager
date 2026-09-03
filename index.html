@@ -13,23 +13,24 @@
 
         body {
             font-family: 'Arial', sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: white;
             min-height: 100vh;
             padding: 20px;
         }
 
         .container {
-            max-width: 1400px;
+            max-width: 1000px;
             margin: 0 auto;
         }
 
         header {
-            background: white;
+            background: #f9fafb;
             padding: 30px;
             border-radius: 10px;
             margin-bottom: 30px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
             text-align: center;
+            border: 2px solid #e5e7eb;
         }
 
         h1 {
@@ -51,11 +52,12 @@
         }
 
         .stat-card {
-            background: white;
+            background: #f9fafb;
             padding: 20px;
             border-radius: 8px;
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
             text-align: center;
+            border: 2px solid #e5e7eb;
         }
 
         .stat-label {
@@ -82,24 +84,13 @@
             color: #ef4444;
         }
 
-        .main-content {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 30px;
-            margin-bottom: 30px;
-        }
-
-        @media (max-width: 1024px) {
-            .main-content {
-                grid-template-columns: 1fr;
-            }
-        }
-
         .section {
-            background: white;
+            background: #f9fafb;
             padding: 25px;
             border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            border: 2px solid #e5e7eb;
+            margin-bottom: 30px;
         }
 
         .section h2 {
@@ -126,11 +117,21 @@
             transition: all 0.3s ease;
             font-size: 1.2em;
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            border: none;
         }
 
         .ticket:hover {
             transform: translateY(-3px);
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+        }
+
+        .ticket:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .ticket:disabled:hover {
+            transform: none;
         }
 
         .ticket.available {
@@ -175,9 +176,14 @@
             color: white;
         }
 
-        .btn-primary:hover {
+        .btn-primary:hover:not(:disabled) {
             background: #5568d3;
             transform: translateY(-2px);
+        }
+
+        .btn-primary:disabled {
+            background: #ccc;
+            cursor: not-allowed;
         }
 
         .btn-secondary {
@@ -187,95 +193,6 @@
 
         .btn-secondary:hover {
             background: #d1d5db;
-        }
-
-        .btn-danger {
-            background: #ef4444;
-            color: white;
-        }
-
-        .btn-danger:hover {
-            background: #dc2626;
-        }
-
-        .plans-container {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-            gap: 20px;
-        }
-
-        .plan-card {
-            background: #f9fafb;
-            border: 2px solid #e5e7eb;
-            border-radius: 8px;
-            padding: 20px;
-            transition: all 0.3s ease;
-        }
-
-        .plan-card:hover {
-            border-color: #667eea;
-            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
-        }
-
-        .plan-name {
-            font-size: 1.2em;
-            font-weight: bold;
-            color: #333;
-            margin-bottom: 15px;
-        }
-
-        .plan-info {
-            font-size: 0.9em;
-            margin-bottom: 10px;
-            color: #666;
-        }
-
-        .capacity-bar {
-            width: 100%;
-            height: 20px;
-            background: #e5e7eb;
-            border-radius: 4px;
-            overflow: hidden;
-            margin: 10px 0;
-        }
-
-        .capacity-fill {
-            height: 100%;
-            background: linear-gradient(90deg, #667eea, #764ba2);
-            transition: width 0.3s ease;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-size: 0.8em;
-            font-weight: bold;
-        }
-
-        .plan-tickets {
-            display: flex;
-            gap: 5px;
-            flex-wrap: wrap;
-            margin-top: 10px;
-        }
-
-        .ticket-badge {
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 0.8em;
-            font-weight: bold;
-            color: white;
-        }
-
-        .ticket-badge.available {
-            background: #10b981;
-        }
-
-        .ticket-badge.in-use {
-            background: #f59e0b;
-        }
-
-        .ticket-badge.waiting {
-            background: #ef4444;
         }
 
         .modal {
@@ -322,15 +239,6 @@
             font-weight: bold;
         }
 
-        .form-group select,
-        .form-group input {
-            width: 100%;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            font-size: 1em;
-        }
-
         .legend {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -370,7 +278,7 @@
 
         .footer {
             text-align: center;
-            color: white;
+            color: #666;
             margin-top: 30px;
             padding: 20px;
         }
@@ -388,13 +296,35 @@
             flex: 1;
             min-width: 100px;
         }
+
+        .status-badge {
+            display: inline-block;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+
+        .status-badge.accepting {
+            background: #d1fae5;
+            color: #047857;
+        }
+
+        .status-badge.full {
+            background: #fee2e2;
+            color: #991b1b;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <header>
             <h1>🎉 文化祭 整理券管理システム</h1>
-            <p class="subtitle">全25枚の整理券を6つの企画で管理</p>
+            <p class="subtitle">全25枚の整理券を企画で管理</p>
+            <div class="status-badge" id="statusBadge">
+                🟢 受付中
+            </div>
         </header>
 
         <!-- 統計情報 -->
@@ -418,41 +348,33 @@
             </div>
         </div>
 
-        <div class="main-content">
-            <!-- 左側：整理券一覧 -->
-            <div class="section">
-                <h2>📋 整理券一覧</h2>
-                <div class="ticket-list" id="ticketList"></div>
-                
-                <div class="controls">
-                    <button class="btn-primary" onclick="openTicketModal()">🎫 新規整理券配布</button>
-                    <button class="btn-secondary" onclick="resetAll()">🔄 リセット</button>
-                </div>
-
-                <div class="legend">
-                    <div class="legend-item">
-                        <div class="legend-color available"></div>
-                        <span>受付待ち</span>
-                    </div>
-                    <div class="legend-item">
-                        <div class="legend-color in-use"></div>
-                        <span>企画内</span>
-                    </div>
-                    <div class="legend-item">
-                        <div class="legend-color waiting"></div>
-                        <span>待機中</span>
-                    </div>
-                    <div class="legend-item">
-                        <div class="legend-color returned"></div>
-                        <span>回収済み</span>
-                    </div>
-                </div>
+        <!-- 整理券一覧セクション -->
+        <div class="section">
+            <h2>📋 整理券一覧</h2>
+            <div class="ticket-list" id="ticketList"></div>
+            
+            <div class="controls">
+                <button class="btn-primary" id="receiveBtn" onclick="openReceiveModal()">🎫 受け取り処理</button>
+                <button class="btn-secondary" onclick="resetAll()">🔄 リセット</button>
             </div>
 
-            <!-- 右側：企画情報 -->
-            <div class="section">
-                <h2>🎪 企画一覧（容量：6組）</h2>
-                <div class="plans-container" id="plansContainer"></div>
+            <div class="legend">
+                <div class="legend-item">
+                    <div class="legend-color available"></div>
+                    <span>受付待ち</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color in-use"></div>
+                    <span>企画内</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color waiting"></div>
+                    <span>待機中</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color returned"></div>
+                    <span>回収済み</span>
+                </div>
             </div>
         </div>
 
@@ -461,24 +383,15 @@
         </div>
     </div>
 
-    <!-- 整理券配布モーダル -->
-    <div id="ticketModal" class="modal">
+    <!-- 受け取り処理モーダル -->
+    <div id="receiveModal" class="modal">
         <div class="modal-content">
-            <span class="modal-close" onclick="closeTicketModal()">&times;</span>
-            <h2>🎫 整理券配布</h2>
-            <div class="form-group">
-                <label for="ticketNumber">整理券番号:</label>
-                <input type="text" id="ticketNumber" placeholder="自動生成" disabled>
-            </div>
-            <div class="form-group">
-                <label for="ticketPlan">企画選択:</label>
-                <select id="ticketPlan">
-                    <option value="">-- 企画を選択してください --</option>
-                </select>
-            </div>
+            <span class="modal-close" onclick="closeReceiveModal()">&times;</span>
+            <h2>🎫 受け取り処理</h2>
+            <p style="margin-bottom: 20px; color: #666;">受け取った整理券を企画内へ移動します。</p>
             <div class="action-buttons">
-                <button class="btn-primary btn-small" onclick="assignTicketToPlan()">企画に割り当て</button>
-                <button class="btn-secondary btn-small" onclick="closeTicketModal()">キャンセル</button>
+                <button class="btn-primary btn-small" onclick="moveToInUse()">企画に入場</button>
+                <button class="btn-secondary btn-small" onclick="closeReceiveModal()">キャンセル</button>
             </div>
         </div>
     </div>
@@ -487,53 +400,47 @@
     <div id="operationModal" class="modal">
         <div class="modal-content">
             <span class="modal-close" onclick="closeOperationModal()">&times;</span>
-            <h2 id="operationTitle">整理券操作</h2>
-            <p style="margin-bottom: 20px; color: #666;">選択した整理券: <strong id="selectedTicketNumber"></strong></p>
+            <h2 id="operationTitle">整理券 #<span id="selectedTicketNumber"></span> の操作</h2>
+            <p style="margin-bottom: 20px; color: #666;" id="operationStatus"></p>
             <div class="action-buttons">
-                <button class="btn-primary btn-small" onclick="moveToInUse()">企画へ入場</button>
-                <button class="btn-primary btn-small" onclick="moveToWaiting()">待機へ移動</button>
-                <button class="btn-primary btn-small" onclick="moveToReturned()">回収</button>
+                <button class="btn-primary btn-small" id="btnToWaiting" onclick="moveToWaiting()">待機へ移動</button>
+                <button class="btn-primary btn-small" id="btnToReturned" onclick="moveToReturned()">回収</button>
                 <button class="btn-secondary btn-small" onclick="closeOperationModal()">キャンセル</button>
             </div>
         </div>
     </div>
 
     <script>
-        // 企画リスト
-        const plans = [
-            { id: 1, name: '🎮 ゲームコーナー', capacity: 6 },
-            { id: 2, name: '🍜 食べ物フェスタ', capacity: 6 },
-            { id: 3, name: '🎨 アート展示', capacity: 6 },
-            { id: 4, name: '🎤 ステージパフォーマンス', capacity: 6 },
-            { id: 5, name: '📸 写真ブース', capacity: 6 },
-            { id: 6, name: '🎭 演劇公演', capacity: 6 }
-        ];
+        const STORAGE_KEY = 'festival_tickets_data';
+        const MAX_CAPACITY = 6;
 
-        // 整理券データ
         let tickets = [];
-        let nextTicketId = 1;
+        let selectedTicketId = null;
 
         // 初期化
         function init() {
-            // 25枚の整理券を生成（全て「受付待ち」状態）
-            for (let i = 1; i <= 25; i++) {
-                tickets.push({
-                    id: i,
-                    number: i,
-                    status: 'available', // available, in-use, waiting, returned
-                    plan: null,
-                    timestamp: new Date()
-                });
+            const saved = localStorage.getItem(STORAGE_KEY);
+            if (saved) {
+                tickets = JSON.parse(saved);
+            } else {
+                // 25枚の整理券を生成
+                for (let i = 1; i <= 25; i++) {
+                    tickets.push({
+                        id: i,
+                        number: i,
+                        status: 'available', // available, in-use, waiting, returned
+                        timestamp: new Date()
+                    });
+                }
             }
-            nextTicketId = 26;
             renderAll();
         }
 
         // 全画面を再描画
         function renderAll() {
             renderTickets();
-            renderPlans();
             updateStats();
+            updateReceiveButton();
         }
 
         // 整理券表示の更新
@@ -542,7 +449,7 @@
             ticketList.innerHTML = '';
 
             tickets.forEach(ticket => {
-                const ticketEl = document.createElement('div');
+                const ticketEl = document.createElement('button');
                 ticketEl.className = `ticket ${ticket.status}`;
                 ticketEl.textContent = ticket.number;
                 ticketEl.onclick = () => selectTicket(ticket.id);
@@ -550,155 +457,157 @@
             });
         }
 
-        // 企画表示の更新
-        function renderPlans() {
-            const plansContainer = document.getElementById('plansContainer');
-            plansContainer.innerHTML = '';
-
-            plans.forEach(plan => {
-                const planTickets = tickets.filter(t => t.plan === plan.id && t.status === 'in-use');
-                const waitingTickets = tickets.filter(t => t.plan === plan.id && t.status === 'waiting');
-                const totalInPlan = planTickets.length + waitingTickets.length;
-                const capacity = plan.capacity;
-                const occupancy = (totalInPlan / capacity) * 100;
-
-                const planCard = document.createElement('div');
-                planCard.className = 'plan-card';
-                planCard.innerHTML = `
-                    <div class="plan-name">${plan.name}</div>
-                    <div class="plan-info">容量: ${capacity}組</div>
-                    <div class="plan-info">現在: ${totalInPlan}組</div>
-                    
-                    <div class="capacity-bar">
-                        <div class="capacity-fill" style="width: ${Math.min(occupancy, 100)}%;">
-                            ${totalInPlan > 0 ? totalInPlan : ''}
-                        </div>
-                    </div>
-
-                    <div class="plan-info">状態: ${totalInPlan >= capacity ? '✅ 満員' : '🔵 受付中'}</div>
-                    
-                    <div class="plan-tickets">
-                        ${planTickets.map(t => `<span class="ticket-badge in-use">${t.number}</span>`).join('')}
-                        ${waitingTickets.map(t => `<span class="ticket-badge waiting">${t.number}</span>`).join('')}
-                    </div>
-                `;
-                plansContainer.appendChild(planCard);
-            });
-        }
-
         // 統計情報の更新
         function updateStats() {
-            document.getElementById('availableCount').textContent = 
-                tickets.filter(t => t.status === 'available').length;
-            document.getElementById('inUseCount').textContent = 
-                tickets.filter(t => t.status === 'in-use').length;
-            document.getElementById('waitingCount').textContent = 
-                tickets.filter(t => t.status === 'waiting').length;
-            document.getElementById('returnedCount').textContent = 
-                tickets.filter(t => t.status === 'returned').length;
+            const availableCount = tickets.filter(t => t.status === 'available').length;
+            const inUseCount = tickets.filter(t => t.status === 'in-use').length;
+            const waitingCount = tickets.filter(t => t.status === 'waiting').length;
+            const returnedCount = tickets.filter(t => t.status === 'returned').length;
+
+            document.getElementById('availableCount').textContent = availableCount;
+            document.getElementById('inUseCount').textContent = inUseCount;
+            document.getElementById('waitingCount').textContent = waitingCount;
+            document.getElementById('returnedCount').textContent = returnedCount;
+
+            // ステータスバッジの更新
+            const isFull = inUseCount >= MAX_CAPACITY;
+            const statusBadge = document.getElementById('statusBadge');
+            if (isFull) {
+                statusBadge.textContent = '🔴 満員 - 受付停止中';
+                statusBadge.className = 'status-badge full';
+            } else {
+                statusBadge.textContent = '🟢 受付中';
+                statusBadge.className = 'status-badge accepting';
+            }
+
+            saveToLocalStorage();
+        }
+
+        // 受け取りボタンの有効/無効を更新
+        function updateReceiveButton() {
+            const inUseCount = tickets.filter(t => t.status === 'in-use').length;
+            const isFull = inUseCount >= MAX_CAPACITY;
+            document.getElementById('receiveBtn').disabled = isFull;
         }
 
         // 整理券を選択
         function selectTicket(ticketId) {
             const ticket = tickets.find(t => t.id === ticketId);
-            if (ticket) {
+            if (ticket && ticket.status !== 'available') {
+                selectedTicketId = ticketId;
                 document.getElementById('selectedTicketNumber').textContent = ticket.number;
-                document.getElementById('operationTitle').textContent = `整理券 #${ticket.number} の操作`;
+                
+                // ステータスに応じてボタンを表示/非表示
+                const btnToWaiting = document.getElementById('btnToWaiting');
+                const btnToReturned = document.getElementById('btnToReturned');
+                const operationStatus = document.getElementById('operationStatus');
+
+                if (ticket.status === 'in-use') {
+                    btnToWaiting.style.display = 'block';
+                    btnToReturned.style.display = 'block';
+                    operationStatus.textContent = '現在のステータス: 企画内';
+                } else if (ticket.status === 'waiting') {
+                    btnToWaiting.style.display = 'none';
+                    btnToReturned.style.display = 'block';
+                    operationStatus.textContent = '現在のステータス: 待機中';
+                } else if (ticket.status === 'returned') {
+                    btnToWaiting.style.display = 'none';
+                    btnToReturned.style.display = 'none';
+                    operationStatus.textContent = '現在のステータス: 回収済み';
+                }
+
                 document.getElementById('operationModal').style.display = 'block';
             }
         }
 
-        // 企画に割り当て
-        function assignTicketToPlan() {
-            const planId = parseInt(document.getElementById('ticketPlan').value);
-            if (!planId) {
-                alert('企画を選択してください');
-                return;
-            }
-
-            // 受付待ち状態の整理券を探す
-            const availableTicket = tickets.find(t => t.status === 'available');
-            if (!availableTicket) {
-                alert('受付待ちの整理券がありません');
-                return;
-            }
-
-            availableTicket.plan = planId;
-            availableTicket.status = 'in-use';
-            availableTicket.timestamp = new Date();
-
-            closeTicketModal();
-            renderAll();
-        }
-
         // 企画へ入場
         function moveToInUse() {
-            const selectedNumber = parseInt(document.getElementById('selectedTicketNumber').textContent);
-            const ticket = tickets.find(t => t.number === selectedNumber);
-            if (ticket) {
-                ticket.status = 'in-use';
-                closeOperationModal();
-                renderAll();
+            if (selectedTicketId !== null) {
+                const ticket = tickets.find(t => t.id === selectedTicketId);
+                if (ticket && ticket.status === 'available') {
+                    const inUseCount = tickets.filter(t => t.status === 'in-use').length;
+                    if (inUseCount < MAX_CAPACITY) {
+                        ticket.status = 'in-use';
+                        ticket.timestamp = new Date();
+                        closeReceiveModal();
+                        renderAll();
+                    } else {
+                        alert('企画は満員です');
+                    }
+                }
             }
         }
 
         // 待機へ移動
         function moveToWaiting() {
-            const selectedNumber = parseInt(document.getElementById('selectedTicketNumber').textContent);
-            const ticket = tickets.find(t => t.number === selectedNumber);
-            if (ticket) {
-                ticket.status = 'waiting';
-                closeOperationModal();
-                renderAll();
+            if (selectedTicketId !== null) {
+                const ticket = tickets.find(t => t.id === selectedTicketId);
+                if (ticket && ticket.status === 'in-use') {
+                    ticket.status = 'waiting';
+                    ticket.timestamp = new Date();
+                    closeOperationModal();
+                    renderAll();
+                }
             }
         }
 
         // 回収
         function moveToReturned() {
-            const selectedNumber = parseInt(document.getElementById('selectedTicketNumber').textContent);
-            const ticket = tickets.find(t => t.number === selectedNumber);
-            if (ticket) {
-                ticket.status = 'returned';
-                closeOperationModal();
-                renderAll();
+            if (selectedTicketId !== null) {
+                const ticket = tickets.find(t => t.id === selectedTicketId);
+                if (ticket) {
+                    ticket.status = 'returned';
+                    ticket.timestamp = new Date();
+                    closeOperationModal();
+                    renderAll();
+                }
             }
         }
 
         // モーダル操作
-        function openTicketModal() {
-            const selectEl = document.getElementById('ticketPlan');
-            selectEl.innerHTML = '<option value="">-- 企画を選択してください --</option>';
-            plans.forEach(plan => {
-                const option = document.createElement('option');
-                option.value = plan.id;
-                option.textContent = plan.name;
-                selectEl.appendChild(option);
-            });
-            document.getElementById('ticketModal').style.display = 'block';
+        function openReceiveModal() {
+            selectedTicketId = null;
+            document.getElementById('receiveModal').style.display = 'block';
         }
 
-        function closeTicketModal() {
-            document.getElementById('ticketModal').style.display = 'none';
+        function closeReceiveModal() {
+            document.getElementById('receiveModal').style.display = 'none';
+            selectedTicketId = null;
         }
 
         function closeOperationModal() {
             document.getElementById('operationModal').style.display = 'none';
+            selectedTicketId = null;
         }
 
         // リセット
         function resetAll() {
             if (confirm('すべてのデータをリセットしますか？')) {
                 tickets = [];
-                init();
+                for (let i = 1; i <= 25; i++) {
+                    tickets.push({
+                        id: i,
+                        number: i,
+                        status: 'available',
+                        timestamp: new Date()
+                    });
+                }
+                saveToLocalStorage();
+                renderAll();
             }
+        }
+
+        // LocalStorageに保存
+        function saveToLocalStorage() {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(tickets));
         }
 
         // ウィンドウクリックでモーダルを閉じる
         window.onclick = function(event) {
-            const ticketModal = document.getElementById('ticketModal');
+            const receiveModal = document.getElementById('receiveModal');
             const operationModal = document.getElementById('operationModal');
-            if (event.target === ticketModal) {
-                ticketModal.style.display = 'none';
+            if (event.target === receiveModal) {
+                receiveModal.style.display = 'none';
             }
             if (event.target === operationModal) {
                 operationModal.style.display = 'none';
