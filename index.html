@@ -354,7 +354,6 @@
             <div class="ticket-list" id="ticketList"></div>
             
             <div class="controls">
-                <button class="btn-primary" id="receiveBtn" onclick="openReceiveModal()">🎫 受け取り処理</button>
                 <button class="btn-secondary" onclick="resetAll()">🔄 リセット</button>
             </div>
 
@@ -383,19 +382,6 @@
         </div>
     </div>
 
-    <!-- 受け取り処理モーダル -->
-    <div id="receiveModal" class="modal">
-        <div class="modal-content">
-            <span class="modal-close" onclick="closeReceiveModal()">&times;</span>
-            <h2>🎫 受け取り処理</h2>
-            <p style="margin-bottom: 20px; color: #666;">受け取った整理券を企画内へ移動します。</p>
-            <div class="action-buttons">
-                <button class="btn-primary btn-small" onclick="moveToInUse()">企画に入場</button>
-                <button class="btn-secondary btn-small" onclick="closeReceiveModal()">キャンセル</button>
-            </div>
-        </div>
-    </div>
-
     <!-- 整理券操作モーダル -->
     <div id="operationModal" class="modal">
         <div class="modal-content">
@@ -403,6 +389,7 @@
             <h2 id="operationTitle">整理券 #<span id="selectedTicketNumber"></span> の操作</h2>
             <p style="margin-bottom: 20px; color: #666;" id="operationStatus"></p>
             <div class="action-buttons">
+                <button class="btn-primary btn-small" id="btnToInUse" onclick="moveToInUse()">企画に入場</button>
                 <button class="btn-primary btn-small" id="btnToWaiting" onclick="moveToWaiting()">待機へ移動</button>
                 <button class="btn-primary btn-small" id="btnToReturned" onclick="moveToReturned()">回収</button>
                 <button class="btn-secondary btn-small" onclick="closeOperationModal()">キャンセル</button>
@@ -440,7 +427,6 @@
         function renderAll() {
             renderTickets();
             updateStats();
-            updateReceiveButton();
         }
 
         // 整理券表示の更新
@@ -483,34 +469,45 @@
             saveToLocalStorage();
         }
 
-        // 受け取りボタンの有効/無効を更新
-        function updateReceiveButton() {
-            const inUseCount = tickets.filter(t => t.status === 'in-use').length;
-            const isFull = inUseCount >= MAX_CAPACITY;
-            document.getElementById('receiveBtn').disabled = isFull;
-        }
-
         // 整理券を選択
         function selectTicket(ticketId) {
             const ticket = tickets.find(t => t.id === ticketId);
-            if (ticket && ticket.status !== 'available') {
+            if (ticket) {
                 selectedTicketId = ticketId;
                 document.getElementById('selectedTicketNumber').textContent = ticket.number;
                 
                 // ステータスに応じてボタンを表示/非表示
+                const btnToInUse = document.getElementById('btnToInUse');
                 const btnToWaiting = document.getElementById('btnToWaiting');
                 const btnToReturned = document.getElementById('btnToReturned');
                 const operationStatus = document.getElementById('operationStatus');
 
-                if (ticket.status === 'in-use') {
+                // 全ボタンをデフォルトで表示
+                btnToInUse.style.display = 'block';
+                btnToWaiting.style.display = 'block';
+                btnToReturned.style.display = 'block';
+
+                if (ticket.status === 'available') {
+                    // 受付待ちの場合：企画に入場できる
+                    btnToInUse.style.display = 'block';
+                    btnToWaiting.style.display = 'none';
+                    btnToReturned.style.display = 'none';
+                    operationStatus.textContent = '現在のステータス: 受付待ち';
+                } else if (ticket.status === 'in-use') {
+                    // 企画内の場合：待機へ移動、回収できる
+                    btnToInUse.style.display = 'none';
                     btnToWaiting.style.display = 'block';
                     btnToReturned.style.display = 'block';
                     operationStatus.textContent = '現在のステータス: 企画内';
                 } else if (ticket.status === 'waiting') {
+                    // 待機中の場合：企画に入場、回収できる
+                    btnToInUse.style.display = 'block';
                     btnToWaiting.style.display = 'none';
                     btnToReturned.style.display = 'block';
                     operationStatus.textContent = '現在のステータス: 待機中';
                 } else if (ticket.status === 'returned') {
+                    // 回収済みの場合：操作できない
+                    btnToInUse.style.display = 'none';
                     btnToWaiting.style.display = 'none';
                     btnToReturned.style.display = 'none';
                     operationStatus.textContent = '現在のステータス: 回収済み';
@@ -524,12 +521,12 @@
         function moveToInUse() {
             if (selectedTicketId !== null) {
                 const ticket = tickets.find(t => t.id === selectedTicketId);
-                if (ticket && ticket.status === 'available') {
+                if (ticket && (ticket.status === 'available' || ticket.status === 'waiting')) {
                     const inUseCount = tickets.filter(t => t.status === 'in-use').length;
                     if (inUseCount < MAX_CAPACITY) {
                         ticket.status = 'in-use';
                         ticket.timestamp = new Date();
-                        closeReceiveModal();
+                        closeOperationModal();
                         renderAll();
                     } else {
                         alert('企画は満員です');
@@ -555,7 +552,7 @@
         function moveToReturned() {
             if (selectedTicketId !== null) {
                 const ticket = tickets.find(t => t.id === selectedTicketId);
-                if (ticket) {
+                if (ticket && (ticket.status === 'in-use' || ticket.status === 'waiting')) {
                     ticket.status = 'returned';
                     ticket.timestamp = new Date();
                     closeOperationModal();
@@ -565,16 +562,6 @@
         }
 
         // モーダル操作
-        function openReceiveModal() {
-            selectedTicketId = null;
-            document.getElementById('receiveModal').style.display = 'block';
-        }
-
-        function closeReceiveModal() {
-            document.getElementById('receiveModal').style.display = 'none';
-            selectedTicketId = null;
-        }
-
         function closeOperationModal() {
             document.getElementById('operationModal').style.display = 'none';
             selectedTicketId = null;
@@ -604,11 +591,7 @@
 
         // ウィンドウクリックでモーダルを閉じる
         window.onclick = function(event) {
-            const receiveModal = document.getElementById('receiveModal');
             const operationModal = document.getElementById('operationModal');
-            if (event.target === receiveModal) {
-                receiveModal.style.display = 'none';
-            }
             if (event.target === operationModal) {
                 operationModal.style.display = 'none';
             }
