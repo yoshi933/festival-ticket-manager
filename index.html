@@ -391,6 +391,7 @@
             <div class="action-buttons">
                 <button class="btn-primary btn-small" id="btnToInUse" onclick="moveToInUse()">企画に入場</button>
                 <button class="btn-primary btn-small" id="btnToWaiting" onclick="moveToWaiting()">待機へ移動</button>
+                <button class="btn-primary btn-small" id="btnExit" onclick="exitFromInUse()">退場</button>
                 <button class="btn-primary btn-small" id="btnToReturned" onclick="moveToReturned()">回収</button>
                 <button class="btn-secondary btn-small" onclick="closeOperationModal()">キャンセル</button>
             </div>
@@ -419,6 +420,7 @@
                         timestamp: new Date()
                     });
                 }
+                saveToLocalStorage();
             }
             renderAll();
         }
@@ -474,43 +476,52 @@
             const ticket = tickets.find(t => t.id === ticketId);
             if (ticket) {
                 selectedTicketId = ticketId;
+                const inUseCount = tickets.filter(t => t.status === 'in-use').length;
+                const isFull = inUseCount >= MAX_CAPACITY;
+
                 document.getElementById('selectedTicketNumber').textContent = ticket.number;
                 
                 // ステータスに応じてボタンを表示/非表示
                 const btnToInUse = document.getElementById('btnToInUse');
                 const btnToWaiting = document.getElementById('btnToWaiting');
+                const btnExit = document.getElementById('btnExit');
                 const btnToReturned = document.getElementById('btnToReturned');
                 const operationStatus = document.getElementById('operationStatus');
 
-                // 全ボタンをデフォルトで表示
-                btnToInUse.style.display = 'block';
-                btnToWaiting.style.display = 'block';
-                btnToReturned.style.display = 'block';
+                // 全ボタンをデフォルトで非表示
+                btnToInUse.style.display = 'none';
+                btnToWaiting.style.display = 'none';
+                btnExit.style.display = 'none';
+                btnToReturned.style.display = 'none';
 
                 if (ticket.status === 'available') {
-                    // 受付待ちの場合：企画に入場できる
-                    btnToInUse.style.display = 'block';
-                    btnToWaiting.style.display = 'none';
-                    btnToReturned.style.display = 'none';
+                    // 受付待ちの場合
                     operationStatus.textContent = '現在のステータス: 受付待ち';
+                    if (isFull) {
+                        // 企画が満員の場合：待機へ移動のみ
+                        btnToWaiting.style.display = 'block';
+                    } else {
+                        // 企画に空きがある場合：入場と待機へ移動
+                        btnToInUse.style.display = 'block';
+                        btnToWaiting.style.display = 'block';
+                    }
                 } else if (ticket.status === 'in-use') {
-                    // 企画内の場合：待機へ移動、回収できる
-                    btnToInUse.style.display = 'none';
-                    btnToWaiting.style.display = 'block';
-                    btnToReturned.style.display = 'block';
+                    // 企画内の場合：退場のみ
+                    btnExit.style.display = 'block';
                     operationStatus.textContent = '現在のステータス: 企画内';
                 } else if (ticket.status === 'waiting') {
-                    // 待機中の場合：企画に入場、回収できる
-                    btnToInUse.style.display = 'block';
-                    btnToWaiting.style.display = 'none';
-                    btnToReturned.style.display = 'block';
+                    // 待機中の場合
                     operationStatus.textContent = '現在のステータス: 待機中';
+                    btnToReturned.style.display = 'block';
+                    if (isFull) {
+                        // 企画が満員の場合：回収のみ
+                    } else {
+                        // 企画に空きがある場合：入場も可能
+                        btnToInUse.style.display = 'block';
+                    }
                 } else if (ticket.status === 'returned') {
                     // 回収済みの場合：操作できない
-                    btnToInUse.style.display = 'none';
-                    btnToWaiting.style.display = 'none';
-                    btnToReturned.style.display = 'none';
-                    operationStatus.textContent = '現在のステータス: 回収済み';
+                    operationStatus.textContent = '現在のステータス: 回収済み（操作不可）';
                 }
 
                 document.getElementById('operationModal').style.display = 'block';
@@ -539,6 +550,19 @@
         function moveToWaiting() {
             if (selectedTicketId !== null) {
                 const ticket = tickets.find(t => t.id === selectedTicketId);
+                if (ticket && ticket.status === 'available') {
+                    ticket.status = 'waiting';
+                    ticket.timestamp = new Date();
+                    closeOperationModal();
+                    renderAll();
+                }
+            }
+        }
+
+        // 退場（企画内から待機へ移動）
+        function exitFromInUse() {
+            if (selectedTicketId !== null) {
+                const ticket = tickets.find(t => t.id === selectedTicketId);
                 if (ticket && ticket.status === 'in-use') {
                     ticket.status = 'waiting';
                     ticket.timestamp = new Date();
@@ -548,12 +572,12 @@
             }
         }
 
-        // 回収
+        // 回収（待機または企画内から回収待ちへ、その後受付待ちに戻す）
         function moveToReturned() {
             if (selectedTicketId !== null) {
                 const ticket = tickets.find(t => t.id === selectedTicketId);
                 if (ticket && (ticket.status === 'in-use' || ticket.status === 'waiting')) {
-                    ticket.status = 'returned';
+                    ticket.status = 'available'; // 回収後は受付待ちに戻す
                     ticket.timestamp = new Date();
                     closeOperationModal();
                     renderAll();
