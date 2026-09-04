@@ -84,6 +84,10 @@
             color: #ef4444;
         }
 
+        .stat-card.waiting-time .stat-value {
+            color: #8b5cf6;
+        }
+
         .section {
             background: #f9fafb;
             padding: 25px;
@@ -315,6 +319,17 @@
             background: #fee2e2;
             color: #991b1b;
         }
+
+        .waiting-time-note {
+            font-size: 0.75em;
+            color: #666;
+            margin-top: 8px;
+            font-weight: normal;
+        }
+
+        .waiting-time-hidden {
+            display: none;
+        }
     </style>
 </head>
 <body>
@@ -345,6 +360,11 @@
                 <div class="stat-label">回収済みの整理券</div>
                 <div class="stat-value" id="returnedCount">0</div>
                 <span style="color: #06b6d4; font-size: 1.2em;">■</span>
+            </div>
+            <div class="stat-card waiting-time waiting-time-hidden" id="waitingTimeCard">
+                <div class="stat-label">予想待機時間</div>
+                <div class="stat-value" id="waitingTime">約0分</div>
+                <div class="waiting-time-note">企画満員時の目安</div>
             </div>
         </div>
 
@@ -401,6 +421,7 @@
     <script>
         const STORAGE_KEY = 'festival_tickets_data';
         const MAX_CAPACITY = 6;
+        const TIME_PER_GROUP = 15; // 1組あたりの滞在時間（分）
 
         let tickets = [];
         let selectedTicketId = null;
@@ -445,6 +466,12 @@
             });
         }
 
+        // 予想待機時間を計算
+        function calculateWaitingTime(waitingCount) {
+            // 待機中の整理券数 × 15分 = 待機時間の目安
+            return Math.ceil(waitingCount * TIME_PER_GROUP);
+        }
+
         // 統計情報の更新
         function updateStats() {
             const availableCount = tickets.filter(t => t.status === 'available').length;
@@ -457,8 +484,18 @@
             document.getElementById('waitingCount').textContent = waitingCount;
             document.getElementById('returnedCount').textContent = returnedCount;
 
-            // ステータスバッジの更新
+            // 予想待機時間の表示/非表示と計算
             const isFull = inUseCount >= MAX_CAPACITY;
+            const waitingTimeCard = document.getElementById('waitingTimeCard');
+            if (isFull && waitingCount > 0) {
+                const waitingTime = calculateWaitingTime(waitingCount);
+                document.getElementById('waitingTime').textContent = `約${waitingTime}分`;
+                waitingTimeCard.classList.remove('waiting-time-hidden');
+            } else {
+                waitingTimeCard.classList.add('waiting-time-hidden');
+            }
+
+            // ステータスバッジの更新
             const statusBadge = document.getElementById('statusBadge');
             if (isFull) {
                 statusBadge.textContent = '🔴 満員 - 受付停止中';
