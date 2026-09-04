@@ -330,6 +330,21 @@
         .waiting-time-hidden {
             display: none;
         }
+
+        .timing-info {
+            margin-top: 12px;
+            padding: 12px;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            background: #f9fafb;
+            color: #374151;
+            font-size: 0.9em;
+            line-height: 1.6;
+        }
+
+        .timing-info p {
+            margin: 4px 0;
+        }
     </style>
 </head>
 <body>
@@ -408,6 +423,10 @@
             <span class="modal-close" onclick="closeOperationModal()">&times;</span>
             <h2 id="operationTitle">整理券 #<span id="selectedTicketNumber"></span> の操作</h2>
             <p style="margin-bottom: 20px; color: #666;" id="operationStatus"></p>
+            <div class="timing-info">
+                <p>入場時刻: <span id="inUseAtDisplay">-</span>（経過: <span id="inUseElapsedDisplay">-</span>）</p>
+                <p>待機時刻: <span id="waitingAtDisplay">-</span>（経過: <span id="waitingElapsedDisplay">-</span>）</p>
+            </div>
             <div class="action-buttons">
                 <button class="btn-primary btn-small" id="btnToInUse" onclick="moveToInUse()">企画に入場</button>
                 <button class="btn-primary btn-small" id="btnToWaiting" onclick="moveToWaiting()">待機へ移動</button>
@@ -426,20 +445,63 @@
         let tickets = [];
         let selectedTicketId = null;
 
+        function createInitialTicket(number) {
+            return {
+                id: number,
+                number,
+                status: 'available', // available, in-use, waiting, returned
+                timestamp: new Date(),
+                inUseAt: null,
+                waitingAt: null
+            };
+        }
+
+        function normalizeTicket(ticket) {
+            return {
+                ...ticket,
+                inUseAt: ticket.inUseAt ?? null,
+                waitingAt: ticket.waitingAt ?? null
+            };
+        }
+
+        function formatTicketTime(timestamp) {
+            if (!timestamp) return '-';
+            const date = new Date(timestamp);
+            if (Number.isNaN(date.getTime())) return '-';
+            return date.toLocaleTimeString('ja-JP');
+        }
+
+        function formatElapsedTime(timestamp) {
+            if (!timestamp) return '-';
+            const date = new Date(timestamp);
+            if (Number.isNaN(date.getTime())) return '-';
+
+            const elapsedSeconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
+            const hours = Math.floor(elapsedSeconds / 3600);
+            const minutes = Math.floor((elapsedSeconds % 3600) / 60);
+            const seconds = elapsedSeconds % 60;
+
+            if (hours > 0) return `${hours}時間${minutes}分${seconds}秒`;
+            if (minutes > 0) return `${minutes}分${seconds}秒`;
+            return `${seconds}秒`;
+        }
+
+        function updateTimingInfo(ticket) {
+            document.getElementById('inUseAtDisplay').textContent = formatTicketTime(ticket.inUseAt);
+            document.getElementById('inUseElapsedDisplay').textContent = formatElapsedTime(ticket.inUseAt);
+            document.getElementById('waitingAtDisplay').textContent = formatTicketTime(ticket.waitingAt);
+            document.getElementById('waitingElapsedDisplay').textContent = formatElapsedTime(ticket.waitingAt);
+        }
+
         // 初期化
         function init() {
             const saved = localStorage.getItem(STORAGE_KEY);
             if (saved) {
-                tickets = JSON.parse(saved);
+                tickets = JSON.parse(saved).map(normalizeTicket);
             } else {
                 // 25枚の整理券を生成
                 for (let i = 1; i <= 25; i++) {
-                    tickets.push({
-                        id: i,
-                        number: i,
-                        status: 'available', // available, in-use, waiting, returned
-                        timestamp: new Date()
-                    });
+                    tickets.push(createInitialTicket(i));
                 }
                 saveToLocalStorage();
             }
@@ -561,6 +623,7 @@
                     operationStatus.textContent = '現在のステータス: 回収済み（操作不可）';
                 }
 
+                updateTimingInfo(ticket);
                 document.getElementById('operationModal').style.display = 'block';
             }
         }
@@ -574,6 +637,7 @@
                     if (inUseCount < MAX_CAPACITY) {
                         ticket.status = 'in-use';
                         ticket.timestamp = new Date();
+                        ticket.inUseAt = new Date().toISOString();
                         closeOperationModal();
                         renderAll();
                     } else {
@@ -590,6 +654,7 @@
                 if (ticket && ticket.status === 'available') {
                     ticket.status = 'waiting';
                     ticket.timestamp = new Date();
+                    ticket.waitingAt = new Date().toISOString();
                     closeOperationModal();
                     renderAll();
                 }
@@ -603,6 +668,7 @@
                 if (ticket && ticket.status === 'in-use') {
                     ticket.status = 'waiting';
                     ticket.timestamp = new Date();
+                    ticket.waitingAt = new Date().toISOString();
                     closeOperationModal();
                     renderAll();
                 }
@@ -633,12 +699,7 @@
             if (confirm('すべてのデータをリセットしますか？')) {
                 tickets = [];
                 for (let i = 1; i <= 25; i++) {
-                    tickets.push({
-                        id: i,
-                        number: i,
-                        status: 'available',
-                        timestamp: new Date()
-                    });
+                    tickets.push(createInitialTicket(i));
                 }
                 saveToLocalStorage();
                 renderAll();
