@@ -330,31 +330,6 @@
         .waiting-time-hidden {
             display: none;
         }
-
-        .timing-info {
-            margin-top: 12px;
-            padding: 12px;
-            border: 1px solid #e5e7eb;
-            border-radius: 8px;
-            background: #f9fafb;
-            color: #374151;
-            font-size: 0.9em;
-            line-height: 1.6;
-        }
-
-        .timing-info p {
-            margin: 4px 0;
-        }
-
-        .role-chip {
-            display: inline-block;
-            margin-top: 8px;
-            background: #111827;
-            color: #fff;
-            padding: 6px 10px;
-            border-radius: 9999px;
-            font-size: 12px;
-        }
     </style>
 </head>
 <body>
@@ -365,9 +340,9 @@
             <div class="status-badge" id="statusBadge">
                 🟢 受付中
             </div>
-            <div id="roleChip" class="role-chip">端末ロール: 未設定</div>
         </header>
 
+        <!-- 統計情報 -->
         <div class="stats-container">
             <div class="stat-card available">
                 <div class="stat-label">受付待ちの整理券</div>
@@ -393,13 +368,13 @@
             </div>
         </div>
 
+        <!-- 整理券一覧セクション -->
         <div class="section">
             <h2>📋 整理券一覧</h2>
             <div class="ticket-list" id="ticketList"></div>
-
+            
             <div class="controls">
                 <button class="btn-secondary" onclick="resetAll()">🔄 リセット</button>
-                <button class="btn-secondary" onclick="resetDeviceRole()">🪪 端末ロール再設定</button>
             </div>
 
             <div class="legend">
@@ -427,15 +402,12 @@
         </div>
     </div>
 
+    <!-- 整理券操作モーダル -->
     <div id="operationModal" class="modal">
         <div class="modal-content">
             <span class="modal-close" onclick="closeOperationModal()">&times;</span>
             <h2 id="operationTitle">整理券 #<span id="selectedTicketNumber"></span> の操作</h2>
             <p style="margin-bottom: 20px; color: #666;" id="operationStatus"></p>
-            <div class="timing-info">
-                <p>入場時刻: <span id="inUseAtDisplay">-</span>（経過: <span id="inUseElapsedDisplay">-</span>）</p>
-                <p>待機時刻: <span id="waitingAtDisplay">-</span>（経過: <span id="waitingElapsedDisplay">-</span>）</p>
-            </div>
             <div class="action-buttons">
                 <button class="btn-primary btn-small" id="btnToInUse" onclick="moveToInUse()">企画に入場</button>
                 <button class="btn-primary btn-small" id="btnToWaiting" onclick="moveToWaiting()">待機へ移動</button>
@@ -447,259 +419,40 @@
     </div>
 
     <script>
-        // ===== GAS接続設定 =====
-        const API_URL = 'YOUR_WEBAPP_URL_HERE'; // ← 必ず置換
-
-        // ===== LocalStorage keys =====
-        const STORAGE_KEY = 'festival_tickets_data'; // 互換維持用（現在は主にrole/deviceId）
-        const ROLE_KEY = 'festival_device_role';
-        const DEVICE_ID_KEY = 'festival_device_id';
-
+        const STORAGE_KEY = 'festival_tickets_data';
         const MAX_CAPACITY = 6;
-        const TIME_PER_GROUP = 15;
+        const TIME_PER_GROUP = 15; // 1組あたりの滞在時間（分）
 
         let tickets = [];
         let selectedTicketId = null;
-        let stateVersion = null;
-        let deviceRole = null; // 'reception' | 'goal'
 
-        function createInitialTicket(number) {
-            return {
-                id: number,
-                number,
-                status: 'available',
-                timestamp: new Date(),
-                inUseAt: null,
-                waitingAt: null
-            };
-        }
-
-        function normalizeTicket(ticket) {
-            return {
-                ...ticket,
-                inUseAt: ticket.inUseAt ?? null,
-                waitingAt: ticket.waitingAt ?? null
-            };
-        }
-
-        function formatTicketTime(timestamp) {
-            if (!timestamp) return '-';
-            const date = new Date(timestamp);
-            if (Number.isNaN(date.getTime())) return '-';
-            return date.toLocaleTimeString('ja-JP');
-        }
-
-        function formatElapsedTime(timestamp) {
-            if (!timestamp) return '-';
-            const date = new Date(timestamp);
-            if (Number.isNaN(date.getTime())) return '-';
-
-            const elapsedSeconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
-            const hours = Math.floor(elapsedSeconds / 3600);
-            const minutes = Math.floor((elapsedSeconds % 3600) / 60);
-            const seconds = elapsedSeconds % 60;
-
-            if (hours > 0) return `${hours}時間${minutes}分${seconds}秒`;
-            if (minutes > 0) return `${minutes}分${seconds}秒`;
-            return `${seconds}秒`;
-        }
-
-        function updateTimingInfo(ticket) {
-            document.getElementById('inUseAtDisplay').textContent = formatTicketTime(ticket.inUseAt);
-            document.getElementById('inUseElapsedDisplay').textContent = formatElapsedTime(ticket.inUseAt);
-            document.getElementById('waitingAtDisplay').textContent = formatTicketTime(ticket.waitingAt);
-            document.getElementById('waitingElapsedDisplay').textContent = formatElapsedTime(ticket.waitingAt);
-        }
-
-        function getOrCreateDeviceId() {
-            let deviceId = localStorage.getItem(DEVICE_ID_KEY);
-            if (!deviceId) {
-                deviceId = `ipad-${Math.random().toString(36).slice(2, 10)}`;
-                localStorage.setItem(DEVICE_ID_KEY, deviceId);
+        // 初期化
+        function init() {
+            const saved = localStorage.getItem(STORAGE_KEY);
+            if (saved) {
+                tickets = JSON.parse(saved);
+            } else {
+                // 25枚の整理券を生成
+                for (let i = 1; i <= 25; i++) {
+                    tickets.push({
+                        id: i,
+                        number: i,
+                        status: 'available', // available, in-use, waiting, returned
+                        timestamp: new Date()
+                    });
+                }
+                saveToLocalStorage();
             }
-            return deviceId;
-        }
-
-        function getRole() {
-            const r = localStorage.getItem(ROLE_KEY);
-            return (r === 'reception' || r === 'goal') ? r : null;
-        }
-
-        function setRole(role) {
-            localStorage.setItem(ROLE_KEY, role);
-            deviceRole = role;
-            updateRoleChip();
-        }
-
-        function updateRoleChip() {
-            const chip = document.getElementById('roleChip');
-            if (!chip) return;
-            if (deviceRole === 'reception') chip.textContent = '端末ロール: 受付';
-            else if (deviceRole === 'goal') chip.textContent = '端末ロール: ゴール';
-            else chip.textContent = '端末ロール: 未設定';
-        }
-
-        async function ensureRoleSetup() {
-            const role = getRole();
-            if (role) {
-                deviceRole = role;
-                updateRoleChip();
-                return;
-            }
-
-            const overlay = document.createElement('div');
-            overlay.style.cssText = `
-                position: fixed; inset: 0; background: rgba(0,0,0,.45);
-                display: flex; align-items: center; justify-content: center; z-index: 99999;
-            `;
-            const card = document.createElement('div');
-            card.style.cssText = `
-                width: min(92vw, 440px); background: #fff; border-radius: 16px; padding: 20px;
-                box-shadow: 0 12px 40px rgba(0,0,0,.2);
-            `;
-            card.innerHTML = `
-                <h2 style="margin:0 0 10px;">端末の役割を設定</h2>
-                <p style="margin:0 0 14px; line-height:1.6;">
-                    このiPadが「受付側」か「ゴール側」かを選択してください。<br>
-                    設定はこの端末のLocalStorageに保存されます。
-                </p>
-                <div style="display:grid; gap:10px;">
-                    <button id="btnSetReception" class="btn-primary">受付側に設定</button>
-                    <button id="btnSetGoal" class="btn-primary">ゴール側に設定</button>
-                </div>
-            `;
-            overlay.appendChild(card);
-            document.body.appendChild(overlay);
-
-            await new Promise((resolve) => {
-                document.getElementById('btnSetReception').onclick = () => {
-                    setRole('reception');
-                    overlay.remove();
-                    resolve();
-                };
-                document.getElementById('btnSetGoal').onclick = () => {
-                    setRole('goal');
-                    overlay.remove();
-                    resolve();
-                };
-            });
-        }
-
-        function resetDeviceRole() {
-            if (!confirm('端末ロールを再設定しますか？')) return;
-            localStorage.removeItem(ROLE_KEY);
-            location.reload();
-        }
-
-        // ===== GAS API =====
-        function mapGasStatusToUiStatus(gasStatus) {
-            // GAS: UNISSUED / ISSUED / IN_VENUE / COMPLETED / CANCELED
-            // UI : available / waiting / in-use / returned
-            switch (gasStatus) {
-                case 'UNISSUED': return 'available';
-                case 'ISSUED': return 'waiting';
-                case 'IN_VENUE': return 'in-use';
-                case 'COMPLETED': return 'returned';
-                case 'CANCELED': return 'available';
-                default: return 'available';
-            }
-        }
-
-        function mapUiToTicket(g) {
-            return {
-                id: Number(g.ticketNo),
-                number: Number(g.ticketNo),
-                status: mapGasStatusToUiStatus(g.status),
-                timestamp: g.updatedAt ? new Date(g.updatedAt) : new Date(),
-                inUseAt: g.enteredAt || null,
-                waitingAt: g.issuedAt || null
-            };
-        }
-
-        function assertActionAllowed(action) {
-            // 受付: enterGroup / cancelTicket / getState / resetAll
-            // ゴール: exitGroup / getState
-            if (deviceRole === 'reception') {
-                const allowed = ['getState', 'enterGroup', 'cancelTicket', 'resetAll'];
-                if (!allowed.includes(action)) throw new Error('受付端末ではこの操作はできません');
-            } else if (deviceRole === 'goal') {
-                const allowed = ['getState', 'exitGroup'];
-                if (!allowed.includes(action)) throw new Error('ゴール端末ではこの操作はできません');
-            }
-        }
-
-        async function callApi(action, payload = {}) {
-            assertActionAllowed(action);
-
-            const res = await fetch(API_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action, ...payload })
-            });
-
-            const data = await res.json();
-            if (!data.ok) throw data;
-            return data;
-        }
-
-        async function fetchStateFromServer() {
-            const data = await callApi('getState');
-            stateVersion = data.state.version;
-            tickets = (data.tickets || []).map(mapUiToTicket).map(normalizeTicket);
             renderAll();
         }
 
-        function operatorNameInput() {
-            return deviceRole === 'reception' ? '受付端末' : 'ゴール端末';
-        }
-
-        function commonPayload() {
-            return {
-                requestId: crypto.randomUUID(),
-                expectedVersion: stateVersion,
-                operatorName: operatorNameInput(),
-                deviceId: getOrCreateDeviceId()
-            };
-        }
-
-        function handleApiError(err) {
-            const code = err && err.error;
-            if (code === 'VERSION_CONFLICT') {
-                alert('他端末で更新されました。再同期します。');
-                fetchStateFromServer().catch(() => {});
-                return;
-            }
-            if (code === 'CAPACITY_FULL') {
-                alert('現在6組入場中です。退場処理後に再実行してください。');
-                return;
-            }
-            alert(err?.message || '通信エラーが発生しました');
-        }
-
-        // 初期化
-        async function init() {
-            getOrCreateDeviceId();
-            await ensureRoleSetup();
-
-            // 旧LocalStorageは互換維持で残す（使わない）
-            const saved = localStorage.getItem(STORAGE_KEY);
-            if (saved && !getRole()) {
-                // 今回仕様: キャッシュが残っていてもロール未設定なら設定画面表示済み
-            }
-
-            await fetchStateFromServer();
-
-            // 10秒ごと同期
-            setInterval(() => {
-                fetchStateFromServer().catch(() => {});
-            }, 10000);
-        }
-
+        // 全画面を再描画
         function renderAll() {
             renderTickets();
             updateStats();
         }
 
+        // 整理券表示の更新
         function renderTickets() {
             const ticketList = document.getElementById('ticketList');
             ticketList.innerHTML = '';
@@ -713,10 +466,13 @@
             });
         }
 
+        // 予想待機時間を計算
         function calculateWaitingTime(waitingCount) {
+            // 待機中の整理券数 × 15分 = 待機時間の目安
             return Math.ceil(waitingCount * TIME_PER_GROUP);
         }
 
+        // 統計情報の更新
         function updateStats() {
             const availableCount = tickets.filter(t => t.status === 'available').length;
             const inUseCount = tickets.filter(t => t.status === 'in-use').length;
@@ -728,6 +484,7 @@
             document.getElementById('waitingCount').textContent = waitingCount;
             document.getElementById('returnedCount').textContent = returnedCount;
 
+            // 予想待機時間の表示/非表示と計算
             const isFull = inUseCount >= MAX_CAPACITY;
             const waitingTimeCard = document.getElementById('waitingTimeCard');
             if (isFull && waitingCount > 0) {
@@ -738,6 +495,7 @@
                 waitingTimeCard.classList.add('waiting-time-hidden');
             }
 
+            // ステータスバッジの更新
             const statusBadge = document.getElementById('statusBadge');
             if (isFull) {
                 statusBadge.textContent = '🔴 満員 - 受付停止中';
@@ -746,1944 +504,162 @@
                 statusBadge.textContent = '🟢 受付中';
                 statusBadge.className = 'status-badge accepting';
             }
+
+            saveToLocalStorage();
         }
 
+        // 整理券を選択
         function selectTicket(ticketId) {
             const ticket = tickets.find(t => t.id === ticketId);
-            if (!ticket) return;
+            if (ticket) {
+                selectedTicketId = ticketId;
+                const inUseCount = tickets.filter(t => t.status === 'in-use').length;
+                const isFull = inUseCount >= MAX_CAPACITY;
 
-            selectedTicketId = ticketId;
-            const inUseCount = tickets.filter(t => t.status === 'in-use').length;
-            const isFull = inUseCount >= MAX_CAPACITY;
+                document.getElementById('selectedTicketNumber').textContent = ticket.number;
+                
+                // ステータスに応じてボタンを表示/非表示
+                const btnToInUse = document.getElementById('btnToInUse');
+                const btnToWaiting = document.getElementById('btnToWaiting');
+                const btnExit = document.getElementById('btnExit');
+                const btnToReturned = document.getElementById('btnToReturned');
+                const operationStatus = document.getElementById('operationStatus');
 
-            document.getElementById('selectedTicketNumber').textContent = ticket.number;
+                // 全ボタンをデフォルトで非表示
+                btnToInUse.style.display = 'none';
+                btnToWaiting.style.display = 'none';
+                btnExit.style.display = 'none';
+                btnToReturned.style.display = 'none';
 
-            const btnToInUse = document.getElementById('btnToInUse');
-            const btnToWaiting = document.getElementById('btnToWaiting');
-            const btnExit = document.getElementById('btnExit');
-            const btnToReturned = document.getElementById('btnToReturned');
-            const operationStatus = document.getElementById('operationStatus');
-
-            btnToInUse.style.display = 'none';
-            btnToWaiting.style.display = 'none';
-            btnExit.style.display = 'none';
-            btnToReturned.style.display = 'none';
-
-            // ロールによる操作制限
-            if (deviceRole === 'goal') {
-                // ゴール端末は退場のみ
-                if (ticket.status === 'in-use') {
-                    btnExit.style.display = 'block';
-                    operationStatus.textContent = '現在のステータス: 企画内（ゴール端末: 退場のみ可）';
-                } else {
-                    operationStatus.textContent = 'ゴール端末では「企画内」の整理券のみ退場できます';
-                }
-            } else {
-                // 受付端末（入場・待機・回収のみ）
                 if (ticket.status === 'available') {
+                    // 受付待ちの場合
                     operationStatus.textContent = '現在のステータス: 受付待ち';
                     if (isFull) {
+                        // 企画が満員の場合：待機へ移動のみ
                         btnToWaiting.style.display = 'block';
                     } else {
+                        // 企画に空きがある場合：入場と待機へ移動
                         btnToInUse.style.display = 'block';
                         btnToWaiting.style.display = 'block';
                     }
                 } else if (ticket.status === 'in-use') {
-                    operationStatus.textContent = '現在のステータス: 企画内（受付端末では退場不可）';
+                    // 企画内の場合：退場のみ
+                    btnExit.style.display = 'block';
+                    operationStatus.textContent = '現在のステータス: 企画内';
                 } else if (ticket.status === 'waiting') {
+                    // 待機中の場合
                     operationStatus.textContent = '現在のステータス: 待機中';
                     btnToReturned.style.display = 'block';
-                    if (!isFull) {
+                    if (isFull) {
+                        // 企画が満員の場合：回収のみ
+                    } else {
+                        // 企画に空きがある場合：入場も可能
                         btnToInUse.style.display = 'block';
                     }
                 } else if (ticket.status === 'returned') {
+                    // 回収済みの場合：操作できない
                     operationStatus.textContent = '現在のステータス: 回収済み（操作不可）';
                 }
-            }
 
-            updateTimingInfo(ticket);
-            document.getElementById('operationModal').style.display = 'block';
+                document.getElementById('operationModal').style.display = 'block';
+            }
         }
 
-        // 企画へ入場 (available|waiting -> in-use)
-        async function moveToInUse() {
-            if (deviceRole !== 'reception') return alert('受付端末のみ実行できます');
-            if (selectedTicketId === null) return;
-            const ticket = tickets.find(t => t.id === selectedTicketId);
-            if (!ticket) return;
-
-            try {
-                if (ticket.status === 'available') {
-                    // available を waiting 扱いにしてから enter
-                    await callApi('enterGroup', { ...commonPayload(), ticketNo: ticket.number });
-                } else if (ticket.status === 'waiting') {
-                    await callApi('enterGroup', { ...commonPayload(), ticketNo: ticket.number });
+        // 企画へ入場
+        function moveToInUse() {
+            if (selectedTicketId !== null) {
+                const ticket = tickets.find(t => t.id === selectedTicketId);
+                if (ticket && (ticket.status === 'available' || ticket.status === 'waiting')) {
+                    const inUseCount = tickets.filter(t => t.status === 'in-use').length;
+                    if (inUseCount < MAX_CAPACITY) {
+                        ticket.status = 'in-use';
+                        ticket.timestamp = new Date();
+                        closeOperationModal();
+                        renderAll();
+                    } else {
+                        alert('企画は満員です');
+                    }
                 }
-                closeOperationModal();
-                await fetchStateFromServer();
-            } catch (err) {
-                handleApiError(err);
             }
         }
 
-        // 待機へ移動 (available -> waiting) = GASでは issueTicket 相当がないため
-        // 現仕様では「特定券をwaiting化」はAPI未実装。運用上は available選択時に入場/回収中心に。
-        async function moveToWaiting() {
-            if (deviceRole !== 'reception') return alert('受付端末のみ実行できます');
-            alert('現在のGAS仕様では「任意券を待機化」は未実装です。必要なら issue/assign API を追加します。');
-        }
-
-        // 退場 (in-use -> returned[UI], GAS: COMPLETED)
-        async function exitFromInUse() {
-            if (deviceRole !== 'goal') return alert('ゴール端末のみ実行できます');
-            if (selectedTicketId === null) return;
-            const ticket = tickets.find(t => t.id === selectedTicketId);
-            if (!ticket || ticket.status !== 'in-use') return;
-
-            try {
-                await callApi('exitGroup', { ...commonPayload(), ticketNo: ticket.number });
-                closeOperationModal();
-                await fetchStateFromServer();
-            } catch (err) {
-                handleApiError(err);
+        // 待機へ移動
+        function moveToWaiting() {
+            if (selectedTicketId !== null) {
+                const ticket = tickets.find(t => t.id === selectedTicketId);
+                if (ticket && ticket.status === 'available') {
+                    ticket.status = 'waiting';
+                    ticket.timestamp = new Date();
+                    closeOperationModal();
+                    renderAll();
+                }
             }
         }
 
-        // 回収 (waiting -> available相当の運用) GAS: cancelTicket
-        async function moveToReturned() {
-            if (deviceRole !== 'reception') return alert('受付端末のみ実行できます');
-            if (selectedTicketId === null) return;
-            const ticket = tickets.find(t => t.id === selectedTicketId);
-            if (!ticket) return;
-
-            try {
-                await callApi('cancelTicket', { ...commonPayload(), ticketNo: ticket.number });
-                closeOperationModal();
-                await fetchStateFromServer();
-            } catch (err) {
-                handleApiError(err);
+        // 退場（企画内から待機へ移動）
+        function exitFromInUse() {
+            if (selectedTicketId !== null) {
+                const ticket = tickets.find(t => t.id === selectedTicketId);
+                if (ticket && ticket.status === 'in-use') {
+                    ticket.status = 'waiting';
+                    ticket.timestamp = new Date();
+                    closeOperationModal();
+                    renderAll();
+                }
             }
         }
 
+        // 回収（待機または企画内から回収待ちへ、その後受付待ちに戻す）
+        function moveToReturned() {
+            if (selectedTicketId !== null) {
+                const ticket = tickets.find(t => t.id === selectedTicketId);
+                if (ticket && (ticket.status === 'in-use' || ticket.status === 'waiting')) {
+                    ticket.status = 'available'; // 回収後は受付待ちに戻す
+                    ticket.timestamp = new Date();
+                    closeOperationModal();
+                    renderAll();
+                }
+            }
+        }
+
+        // モーダル操作
         function closeOperationModal() {
             document.getElementById('operationModal').style.display = 'none';
             selectedTicketId = null;
         }
 
-        async function resetAll() {
-            if (deviceRole !== 'reception') return alert('リセットは受付端末のみ実行できます');
-            if (!confirm('すべてのデータをリセットしますか？')) return;
-            try {
-                await callApi('resetAll', { ...commonPayload() });
-                await fetchStateFromServer();
-            } catch (err) {
-                handleApiError(err);
+        // リセット
+        function resetAll() {
+            if (confirm('すべてのデータをリセットしますか？')) {
+                tickets = [];
+                for (let i = 1; i <= 25; i++) {
+                    tickets.push({
+                        id: i,
+                        number: i,
+                        status: 'available',
+                        timestamp: new Date()
+                    });
+                }
+                saveToLocalStorage();
+                renderAll();
             }
         }
 
+        // LocalStorageに保存
+        function saveToLocalStorage() {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(tickets));
+        }
+
+        // ウィンドウクリックでモーダルを閉じる
         window.onclick = function(event) {
             const operationModal = document.getElementById('operationModal');
-            if (event.target === operationModal) closeOperationModal();
-        }
-
-        window.addEventListener('load', () => {
-            init().catch((e) => {
-                console.error(e);
-                alert('初期化に失敗しました: ' + (e.message || e.error || JSON.stringify(e)));
-            });
-        });
-    </script>
-</body>
-</html><!DOCTYPE html>
-<html lang="ja">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>文化祭 整理券管理システム</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: 'Arial', sans-serif;
-            background: white;
-            min-height: 100vh;
-            padding: 20px;
-        }
-
-        .container {
-            max-width: 1000px;
-            margin: 0 auto;
-        }
-
-        header {
-            background: #f9fafb;
-            padding: 30px;
-            border-radius: 10px;
-            margin-bottom: 30px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-            text-align: center;
-            border: 2px solid #e5e7eb;
-        }
-
-        h1 {
-            color: #333;
-            margin-bottom: 10px;
-            font-size: 2.5em;
-        }
-
-        .subtitle {
-            color: #666;
-            font-size: 1.1em;
-        }
-
-        .stats-container {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-            margin-bottom: 30px;
-        }
-
-        .stat-card {
-            background: #f9fafb;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-            text-align: center;
-            border: 2px solid #e5e7eb;
-        }
-
-        .stat-label {
-            color: #666;
-            font-size: 0.9em;
-            margin-bottom: 10px;
-        }
-
-        .stat-value {
-            font-size: 2.5em;
-            font-weight: bold;
-            color: #667eea;
-        }
-
-        .stat-card.available .stat-value {
-            color: #10b981;
-        }
-
-        .stat-card.in-use .stat-value {
-            color: #f59e0b;
-        }
-
-        .stat-card.waiting .stat-value {
-            color: #ef4444;
-        }
-
-        .stat-card.waiting-time .stat-value {
-            color: #8b5cf6;
-        }
-
-        .section {
-            background: #f9fafb;
-            padding: 25px;
-            border-radius: 10px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-            border: 2px solid #e5e7eb;
-            margin-bottom: 30px;
-        }
-
-        .section h2 {
-            color: #333;
-            margin-bottom: 20px;
-            padding-bottom: 15px;
-            border-bottom: 3px solid #667eea;
-        }
-
-        .ticket-list {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
-            gap: 10px;
-        }
-
-        .ticket {
-            aspect-ratio: 1;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 8px;
-            font-weight: bold;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            font-size: 1.2em;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-            border: none;
-        }
-
-        .ticket:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
-        }
-
-        .ticket:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-
-        .ticket:disabled:hover {
-            transform: none;
-        }
-
-        .ticket.available {
-            background: linear-gradient(135deg, #10b981, #059669);
-            color: white;
-        }
-
-        .ticket.in-use {
-            background: linear-gradient(135deg, #f59e0b, #d97706);
-            color: white;
-        }
-
-        .ticket.waiting {
-            background: linear-gradient(135deg, #ef4444, #dc2626);
-            color: white;
-        }
-
-        .ticket.returned {
-            background: linear-gradient(135deg, #06b6d4, #0891b2);
-            color: white;
-        }
-
-        .controls {
-            margin-top: 20px;
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-        }
-
-        button {
-            padding: 12px 20px;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 1em;
-            font-weight: bold;
-            transition: all 0.3s ease;
-        }
-
-        .btn-primary {
-            background: #667eea;
-            color: white;
-        }
-
-        .btn-primary:hover:not(:disabled) {
-            background: #5568d3;
-            transform: translateY(-2px);
-        }
-
-        .btn-primary:disabled {
-            background: #ccc;
-            cursor: not-allowed;
-        }
-
-        .btn-secondary {
-            background: #e5e7eb;
-            color: #333;
-        }
-
-        .btn-secondary:hover {
-            background: #d1d5db;
-        }
-
-        .modal {
-            display: none;
-            position: fixed;
-            z-index: 1000;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.5);
-        }
-
-        .modal-content {
-            background-color: white;
-            margin: 5% auto;
-            padding: 30px;
-            border-radius: 10px;
-            width: 90%;
-            max-width: 500px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        }
-
-        .modal-close {
-            color: #aaa;
-            float: right;
-            font-size: 28px;
-            font-weight: bold;
-            cursor: pointer;
-        }
-
-        .modal-close:hover {
-            color: #000;
-        }
-
-        .form-group {
-            margin-bottom: 15px;
-        }
-
-        .form-group label {
-            display: block;
-            margin-bottom: 5px;
-            color: #333;
-            font-weight: bold;
-        }
-
-        .legend {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 15px;
-            margin-top: 20px;
-            padding-top: 20px;
-            border-top: 2px solid #e5e7eb;
-        }
-
-        .legend-item {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .legend-color {
-            width: 30px;
-            height: 30px;
-            border-radius: 4px;
-        }
-
-        .legend-color.available {
-            background: linear-gradient(135deg, #10b981, #059669);
-        }
-
-        .legend-color.in-use {
-            background: linear-gradient(135deg, #f59e0b, #d97706);
-        }
-
-        .legend-color.waiting {
-            background: linear-gradient(135deg, #ef4444, #dc2626);
-        }
-
-        .legend-color.returned {
-            background: linear-gradient(135deg, #06b6d4, #0891b2);
-        }
-
-        .footer {
-            text-align: center;
-            color: #666;
-            margin-top: 30px;
-            padding: 20px;
-        }
-
-        .action-buttons {
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-            margin-top: 15px;
-        }
-
-        .btn-small {
-            padding: 8px 12px;
-            font-size: 0.9em;
-            flex: 1;
-            min-width: 100px;
-        }
-
-        .status-badge {
-            display: inline-block;
-            padding: 8px 16px;
-            border-radius: 20px;
-            font-size: 0.9em;
-            font-weight: bold;
-            margin-top: 10px;
-        }
-
-        .status-badge.accepting {
-            background: #d1fae5;
-            color: #047857;
-        }
-
-        .status-badge.full {
-            background: #fee2e2;
-            color: #991b1b;
-        }
-
-        .waiting-time-note {
-            font-size: 0.75em;
-            color: #666;
-            margin-top: 8px;
-            font-weight: normal;
-        }
-
-        .waiting-time-hidden {
-            display: none;
-        }
-
-        .timing-info {
-            margin-top: 12px;
-            padding: 12px;
-            border: 1px solid #e5e7eb;
-            border-radius: 8px;
-            background: #f9fafb;
-            color: #374151;
-            font-size: 0.9em;
-            line-height: 1.6;
-        }
-
-        .timing-info p {
-            margin: 4px 0;
-        }
-
-        .role-chip {
-            display: inline-block;
-            margin-top: 8px;
-            background: #111827;
-            color: #fff;
-            padding: 6px 10px;
-            border-radius: 9999px;
-            font-size: 12px;
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <header>
-            <h1>🎉 文化祭 整理券管理システム</h1>
-            <p class="subtitle">全25枚の整理券を企画で管理</p>
-            <div class="status-badge" id="statusBadge">
-                🟢 受付中
-            </div>
-            <div id="roleChip" class="role-chip">端末ロール: 未設定</div>
-        </header>
-
-        <div class="stats-container">
-            <div class="stat-card available">
-                <div class="stat-label">受付待ちの整理券</div>
-                <div class="stat-value" id="availableCount">25</div>
-            </div>
-            <div class="stat-card in-use">
-                <div class="stat-label">企画内の整理券</div>
-                <div class="stat-value" id="inUseCount">0</div>
-            </div>
-            <div class="stat-card waiting">
-                <div class="stat-label">待機中の整理券</div>
-                <div class="stat-value" id="waitingCount">0</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-label">回収済みの整理券</div>
-                <div class="stat-value" id="returnedCount">0</div>
-                <span style="color: #06b6d4; font-size: 1.2em;">■</span>
-            </div>
-            <div class="stat-card waiting-time waiting-time-hidden" id="waitingTimeCard">
-                <div class="stat-label">予想待機時間</div>
-                <div class="stat-value" id="waitingTime">約0分</div>
-                <div class="waiting-time-note">企画満員時の目安</div>
-            </div>
-        </div>
-
-        <div class="section">
-            <h2>📋 整理券一覧</h2>
-            <div class="ticket-list" id="ticketList"></div>
-
-            <div class="controls">
-                <button class="btn-secondary" onclick="resetAll()">🔄 リセット</button>
-                <button class="btn-secondary" onclick="resetDeviceRole()">🪪 端末ロール再設定</button>
-            </div>
-
-            <div class="legend">
-                <div class="legend-item">
-                    <div class="legend-color available"></div>
-                    <span>受付待ち</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color in-use"></div>
-                    <span>企画内</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color waiting"></div>
-                    <span>待機中</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color returned"></div>
-                    <span>回収済み</span>
-                </div>
-            </div>
-        </div>
-
-        <div class="footer">
-            <p>© 2026 文化祭実行委員会</p>
-        </div>
-    </div>
-
-    <div id="operationModal" class="modal">
-        <div class="modal-content">
-            <span class="modal-close" onclick="closeOperationModal()">&times;</span>
-            <h2 id="operationTitle">整理券 #<span id="selectedTicketNumber"></span> の操作</h2>
-            <p style="margin-bottom: 20px; color: #666;" id="operationStatus"></p>
-            <div class="timing-info">
-                <p>入場時刻: <span id="inUseAtDisplay">-</span>（経過: <span id="inUseElapsedDisplay">-</span>）</p>
-                <p>待機時刻: <span id="waitingAtDisplay">-</span>（経過: <span id="waitingElapsedDisplay">-</span>）</p>
-            </div>
-            <div class="action-buttons">
-                <button class="btn-primary btn-small" id="btnToInUse" onclick="moveToInUse()">企画に入場</button>
-                <button class="btn-primary btn-small" id="btnToWaiting" onclick="moveToWaiting()">待機へ移動</button>
-                <button class="btn-primary btn-small" id="btnExit" onclick="exitFromInUse()">退場</button>
-                <button class="btn-primary btn-small" id="btnToReturned" onclick="moveToReturned()">回収</button>
-                <button class="btn-secondary btn-small" onclick="closeOperationModal()">キャンセル</button>
-            </div>
-        </div>
-    </div>
-
-    <script>
-        // ===== GAS接続設定 =====
-        const API_URL = 'YOUR_WEBAPP_URL_HERE'; // ← 必ず置換
-
-        // ===== LocalStorage keys =====
-        const STORAGE_KEY = 'festival_tickets_data'; // 互換維持用（現在は主にrole/deviceId）
-        const ROLE_KEY = 'festival_device_role';
-        const DEVICE_ID_KEY = 'festival_device_id';
-
-        const MAX_CAPACITY = 6;
-        const TIME_PER_GROUP = 15;
-
-        let tickets = [];
-        let selectedTicketId = null;
-        let stateVersion = null;
-        let deviceRole = null; // 'reception' | 'goal'
-
-        function createInitialTicket(number) {
-            return {
-                id: number,
-                number,
-                status: 'available',
-                timestamp: new Date(),
-                inUseAt: null,
-                waitingAt: null
-            };
-        }
-
-        function normalizeTicket(ticket) {
-            return {
-                ...ticket,
-                inUseAt: ticket.inUseAt ?? null,
-                waitingAt: ticket.waitingAt ?? null
-            };
-        }
-
-        function formatTicketTime(timestamp) {
-            if (!timestamp) return '-';
-            const date = new Date(timestamp);
-            if (Number.isNaN(date.getTime())) return '-';
-            return date.toLocaleTimeString('ja-JP');
-        }
-
-        function formatElapsedTime(timestamp) {
-            if (!timestamp) return '-';
-            const date = new Date(timestamp);
-            if (Number.isNaN(date.getTime())) return '-';
-
-            const elapsedSeconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
-            const hours = Math.floor(elapsedSeconds / 3600);
-            const minutes = Math.floor((elapsedSeconds % 3600) / 60);
-            const seconds = elapsedSeconds % 60;
-
-            if (hours > 0) return `${hours}時間${minutes}分${seconds}秒`;
-            if (minutes > 0) return `${minutes}分${seconds}秒`;
-            return `${seconds}秒`;
-        }
-
-        function updateTimingInfo(ticket) {
-            document.getElementById('inUseAtDisplay').textContent = formatTicketTime(ticket.inUseAt);
-            document.getElementById('inUseElapsedDisplay').textContent = formatElapsedTime(ticket.inUseAt);
-            document.getElementById('waitingAtDisplay').textContent = formatTicketTime(ticket.waitingAt);
-            document.getElementById('waitingElapsedDisplay').textContent = formatElapsedTime(ticket.waitingAt);
-        }
-
-        function getOrCreateDeviceId() {
-            let deviceId = localStorage.getItem(DEVICE_ID_KEY);
-            if (!deviceId) {
-                deviceId = `ipad-${Math.random().toString(36).slice(2, 10)}`;
-                localStorage.setItem(DEVICE_ID_KEY, deviceId);
-            }
-            return deviceId;
-        }
-
-        function getRole() {
-            const r = localStorage.getItem(ROLE_KEY);
-            return (r === 'reception' || r === 'goal') ? r : null;
-        }
-
-        function setRole(role) {
-            localStorage.setItem(ROLE_KEY, role);
-            deviceRole = role;
-            updateRoleChip();
-        }
-
-        function updateRoleChip() {
-            const chip = document.getElementById('roleChip');
-            if (!chip) return;
-            if (deviceRole === 'reception') chip.textContent = '端末ロール: 受付';
-            else if (deviceRole === 'goal') chip.textContent = '端末ロール: ゴール';
-            else chip.textContent = '端末ロール: 未設定';
-        }
-
-        async function ensureRoleSetup() {
-            const role = getRole();
-            if (role) {
-                deviceRole = role;
-                updateRoleChip();
-                return;
-            }
-
-            const overlay = document.createElement('div');
-            overlay.style.cssText = `
-                position: fixed; inset: 0; background: rgba(0,0,0,.45);
-                display: flex; align-items: center; justify-content: center; z-index: 99999;
-            `;
-            const card = document.createElement('div');
-            card.style.cssText = `
-                width: min(92vw, 440px); background: #fff; border-radius: 16px; padding: 20px;
-                box-shadow: 0 12px 40px rgba(0,0,0,.2);
-            `;
-            card.innerHTML = `
-                <h2 style="margin:0 0 10px;">端末の役割を設定</h2>
-                <p style="margin:0 0 14px; line-height:1.6;">
-                    このiPadが「受付側」か「ゴール側」かを選択してください。<br>
-                    設定はこの端末のLocalStorageに保存されます。
-                </p>
-                <div style="display:grid; gap:10px;">
-                    <button id="btnSetReception" class="btn-primary">受付側に設定</button>
-                    <button id="btnSetGoal" class="btn-primary">ゴール側に設定</button>
-                </div>
-            `;
-            overlay.appendChild(card);
-            document.body.appendChild(overlay);
-
-            await new Promise((resolve) => {
-                document.getElementById('btnSetReception').onclick = () => {
-                    setRole('reception');
-                    overlay.remove();
-                    resolve();
-                };
-                document.getElementById('btnSetGoal').onclick = () => {
-                    setRole('goal');
-                    overlay.remove();
-                    resolve();
-                };
-            });
-        }
-
-        function resetDeviceRole() {
-            if (!confirm('端末ロールを再設定しますか？')) return;
-            localStorage.removeItem(ROLE_KEY);
-            location.reload();
-        }
-
-        // ===== GAS API =====
-        function mapGasStatusToUiStatus(gasStatus) {
-            // GAS: UNISSUED / ISSUED / IN_VENUE / COMPLETED / CANCELED
-            // UI : available / waiting / in-use / returned
-            switch (gasStatus) {
-                case 'UNISSUED': return 'available';
-                case 'ISSUED': return 'waiting';
-                case 'IN_VENUE': return 'in-use';
-                case 'COMPLETED': return 'returned';
-                case 'CANCELED': return 'available';
-                default: return 'available';
+            if (event.target === operationModal) {
+                operationModal.style.display = 'none';
             }
         }
 
-        function mapUiToTicket(g) {
-            return {
-                id: Number(g.ticketNo),
-                number: Number(g.ticketNo),
-                status: mapGasStatusToUiStatus(g.status),
-                timestamp: g.updatedAt ? new Date(g.updatedAt) : new Date(),
-                inUseAt: g.enteredAt || null,
-                waitingAt: g.issuedAt || null
-            };
-        }
-
-        function assertActionAllowed(action) {
-            // 受付: enterGroup / cancelTicket / getState / resetAll
-            // ゴール: exitGroup / getState
-            if (deviceRole === 'reception') {
-                const allowed = ['getState', 'enterGroup', 'cancelTicket', 'resetAll'];
-                if (!allowed.includes(action)) throw new Error('受付端末ではこの操作はできません');
-            } else if (deviceRole === 'goal') {
-                const allowed = ['getState', 'exitGroup'];
-                if (!allowed.includes(action)) throw new Error('ゴール端末ではこの操作はできません');
-            }
-        }
-
-        async function callApi(action, payload = {}) {
-            assertActionAllowed(action);
-
-            const res = await fetch(API_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action, ...payload })
-            });
-
-            const data = await res.json();
-            if (!data.ok) throw data;
-            return data;
-        }
-
-        async function fetchStateFromServer() {
-            const data = await callApi('getState');
-            stateVersion = data.state.version;
-            tickets = (data.tickets || []).map(mapUiToTicket).map(normalizeTicket);
-            renderAll();
-        }
-
-        function operatorNameInput() {
-            return deviceRole === 'reception' ? '受付端末' : 'ゴール端末';
-        }
-
-        function commonPayload() {
-            return {
-                requestId: crypto.randomUUID(),
-                expectedVersion: stateVersion,
-                operatorName: operatorNameInput(),
-                deviceId: getOrCreateDeviceId()
-            };
-        }
-
-        function handleApiError(err) {
-            const code = err && err.error;
-            if (code === 'VERSION_CONFLICT') {
-                alert('他端末で更新されました。再同期します。');
-                fetchStateFromServer().catch(() => {});
-                return;
-            }
-            if (code === 'CAPACITY_FULL') {
-                alert('現在6組入場中です。退場処理後に再実行してください。');
-                return;
-            }
-            alert(err?.message || '通信エラーが発生しました');
-        }
-
-        // 初期化
-        async function init() {
-            getOrCreateDeviceId();
-            await ensureRoleSetup();
-
-            // 旧LocalStorageは互換維持で残す（使わない）
-            const saved = localStorage.getItem(STORAGE_KEY);
-            if (saved && !getRole()) {
-                // 今回仕様: キャッシュが残っていてもロール未設定なら設定画面表示済み
-            }
-
-            await fetchStateFromServer();
-
-            // 10秒ごと同期
-            setInterval(() => {
-                fetchStateFromServer().catch(() => {});
-            }, 10000);
-        }
-
-        function renderAll() {
-            renderTickets();
-            updateStats();
-        }
-
-        function renderTickets() {
-            const ticketList = document.getElementById('ticketList');
-            ticketList.innerHTML = '';
-
-            tickets.forEach(ticket => {
-                const ticketEl = document.createElement('button');
-                ticketEl.className = `ticket ${ticket.status}`;
-                ticketEl.textContent = ticket.number;
-                ticketEl.onclick = () => selectTicket(ticket.id);
-                ticketList.appendChild(ticketEl);
-            });
-        }
-
-        function calculateWaitingTime(waitingCount) {
-            return Math.ceil(waitingCount * TIME_PER_GROUP);
-        }
-
-        function updateStats() {
-            const availableCount = tickets.filter(t => t.status === 'available').length;
-            const inUseCount = tickets.filter(t => t.status === 'in-use').length;
-            const waitingCount = tickets.filter(t => t.status === 'waiting').length;
-            const returnedCount = tickets.filter(t => t.status === 'returned').length;
-
-            document.getElementById('availableCount').textContent = availableCount;
-            document.getElementById('inUseCount').textContent = inUseCount;
-            document.getElementById('waitingCount').textContent = waitingCount;
-            document.getElementById('returnedCount').textContent = returnedCount;
-
-            const isFull = inUseCount >= MAX_CAPACITY;
-            const waitingTimeCard = document.getElementById('waitingTimeCard');
-            if (isFull && waitingCount > 0) {
-                const waitingTime = calculateWaitingTime(waitingCount);
-                document.getElementById('waitingTime').textContent = `約${waitingTime}分`;
-                waitingTimeCard.classList.remove('waiting-time-hidden');
-            } else {
-                waitingTimeCard.classList.add('waiting-time-hidden');
-            }
-
-            const statusBadge = document.getElementById('statusBadge');
-            if (isFull) {
-                statusBadge.textContent = '🔴 満員 - 受付停止中';
-                statusBadge.className = 'status-badge full';
-            } else {
-                statusBadge.textContent = '🟢 受付中';
-                statusBadge.className = 'status-badge accepting';
-            }
-        }
-
-        function selectTicket(ticketId) {
-            const ticket = tickets.find(t => t.id === ticketId);
-            if (!ticket) return;
-
-            selectedTicketId = ticketId;
-            const inUseCount = tickets.filter(t => t.status === 'in-use').length;
-            const isFull = inUseCount >= MAX_CAPACITY;
-
-            document.getElementById('selectedTicketNumber').textContent = ticket.number;
-
-            const btnToInUse = document.getElementById('btnToInUse');
-            const btnToWaiting = document.getElementById('btnToWaiting');
-            const btnExit = document.getElementById('btnExit');
-            const btnToReturned = document.getElementById('btnToReturned');
-            const operationStatus = document.getElementById('operationStatus');
-
-            btnToInUse.style.display = 'none';
-            btnToWaiting.style.display = 'none';
-            btnExit.style.display = 'none';
-            btnToReturned.style.display = 'none';
-
-            // ロールによる操作制限
-            if (deviceRole === 'goal') {
-                // ゴール端末は退場のみ
-                if (ticket.status === 'in-use') {
-                    btnExit.style.display = 'block';
-                    operationStatus.textContent = '現在のステータス: 企画内（ゴール端末: 退場のみ可）';
-                } else {
-                    operationStatus.textContent = 'ゴール端末では「企画内」の整理券のみ退場できます';
-                }
-            } else {
-                // 受付端末（入場・待機・回収のみ）
-                if (ticket.status === 'available') {
-                    operationStatus.textContent = '現在のステータス: 受付待ち';
-                    if (isFull) {
-                        btnToWaiting.style.display = 'block';
-                    } else {
-                        btnToInUse.style.display = 'block';
-                        btnToWaiting.style.display = 'block';
-                    }
-                } else if (ticket.status === 'in-use') {
-                    operationStatus.textContent = '現在のステータス: 企画内（受付端末では退場不可）';
-                } else if (ticket.status === 'waiting') {
-                    operationStatus.textContent = '現在のステータス: 待機中';
-                    btnToReturned.style.display = 'block';
-                    if (!isFull) {
-                        btnToInUse.style.display = 'block';
-                    }
-                } else if (ticket.status === 'returned') {
-                    operationStatus.textContent = '現在のステータス: 回収済み（操作不可）';
-                }
-            }
-
-            updateTimingInfo(ticket);
-            document.getElementById('operationModal').style.display = 'block';
-        }
-
-        // 企画へ入場 (available|waiting -> in-use)
-        async function moveToInUse() {
-            if (deviceRole !== 'reception') return alert('受付端末のみ実行できます');
-            if (selectedTicketId === null) return;
-            const ticket = tickets.find(t => t.id === selectedTicketId);
-            if (!ticket) return;
-
-            try {
-                if (ticket.status === 'available') {
-                    // available を waiting 扱いにしてから enter
-                    await callApi('enterGroup', { ...commonPayload(), ticketNo: ticket.number });
-                } else if (ticket.status === 'waiting') {
-                    await callApi('enterGroup', { ...commonPayload(), ticketNo: ticket.number });
-                }
-                closeOperationModal();
-                await fetchStateFromServer();
-            } catch (err) {
-                handleApiError(err);
-            }
-        }
-
-        // 待機へ移動 (available -> waiting) = GASでは issueTicket 相当がないため
-        // 現仕様では「特定券をwaiting化」はAPI未実装。運用上は available選択時に入場/回収中心に。
-        async function moveToWaiting() {
-            if (deviceRole !== 'reception') return alert('受付端末のみ実行できます');
-            alert('現在のGAS仕様では「任意券を待機化」は未実装です。必要なら issue/assign API を追加します。');
-        }
-
-        // 退場 (in-use -> returned[UI], GAS: COMPLETED)
-        async function exitFromInUse() {
-            if (deviceRole !== 'goal') return alert('ゴール端末のみ実行できます');
-            if (selectedTicketId === null) return;
-            const ticket = tickets.find(t => t.id === selectedTicketId);
-            if (!ticket || ticket.status !== 'in-use') return;
-
-            try {
-                await callApi('exitGroup', { ...commonPayload(), ticketNo: ticket.number });
-                closeOperationModal();
-                await fetchStateFromServer();
-            } catch (err) {
-                handleApiError(err);
-            }
-        }
-
-        // 回収 (waiting -> available相当の運用) GAS: cancelTicket
-        async function moveToReturned() {
-            if (deviceRole !== 'reception') return alert('受付端末のみ実行できます');
-            if (selectedTicketId === null) return;
-            const ticket = tickets.find(t => t.id === selectedTicketId);
-            if (!ticket) return;
-
-            try {
-                await callApi('cancelTicket', { ...commonPayload(), ticketNo: ticket.number });
-                closeOperationModal();
-                await fetchStateFromServer();
-            } catch (err) {
-                handleApiError(err);
-            }
-        }
-
-        function closeOperationModal() {
-            document.getElementById('operationModal').style.display = 'none';
-            selectedTicketId = null;
-        }
-
-        async function resetAll() {
-            if (deviceRole !== 'reception') return alert('リセットは受付端末のみ実行できます');
-            if (!confirm('すべてのデータをリセットしますか？')) return;
-            try {
-                await callApi('resetAll', { ...commonPayload() });
-                await fetchStateFromServer();
-            } catch (err) {
-                handleApiError(err);
-            }
-        }
-
-        window.onclick = function(event) {
-            const operationModal = document.getElementById('operationModal');
-            if (event.target === operationModal) closeOperationModal();
-        }
-
-        window.addEventListener('load', () => {
-            init().catch((e) => {
-                console.error(e);
-                alert('初期化に失敗しました: ' + (e.message || e.error || JSON.stringify(e)));
-            });
-        });
-    </script>
-</body>
-</html><!DOCTYPE html>
-<html lang="ja">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>文化祭 整理券管理システム</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: 'Arial', sans-serif;
-            background: white;
-            min-height: 100vh;
-            padding: 20px;
-        }
-
-        .container {
-            max-width: 1000px;
-            margin: 0 auto;
-        }
-
-        header {
-            background: #f9fafb;
-            padding: 30px;
-            border-radius: 10px;
-            margin-bottom: 30px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-            text-align: center;
-            border: 2px solid #e5e7eb;
-        }
-
-        h1 {
-            color: #333;
-            margin-bottom: 10px;
-            font-size: 2.5em;
-        }
-
-        .subtitle {
-            color: #666;
-            font-size: 1.1em;
-        }
-
-        .stats-container {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-            margin-bottom: 30px;
-        }
-
-        .stat-card {
-            background: #f9fafb;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-            text-align: center;
-            border: 2px solid #e5e7eb;
-        }
-
-        .stat-label {
-            color: #666;
-            font-size: 0.9em;
-            margin-bottom: 10px;
-        }
-
-        .stat-value {
-            font-size: 2.5em;
-            font-weight: bold;
-            color: #667eea;
-        }
-
-        .stat-card.available .stat-value {
-            color: #10b981;
-        }
-
-        .stat-card.in-use .stat-value {
-            color: #f59e0b;
-        }
-
-        .stat-card.waiting .stat-value {
-            color: #ef4444;
-        }
-
-        .stat-card.waiting-time .stat-value {
-            color: #8b5cf6;
-        }
-
-        .section {
-            background: #f9fafb;
-            padding: 25px;
-            border-radius: 10px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-            border: 2px solid #e5e7eb;
-            margin-bottom: 30px;
-        }
-
-        .section h2 {
-            color: #333;
-            margin-bottom: 20px;
-            padding-bottom: 15px;
-            border-bottom: 3px solid #667eea;
-        }
-
-        .ticket-list {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
-            gap: 10px;
-        }
-
-        .ticket {
-            aspect-ratio: 1;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 8px;
-            font-weight: bold;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            font-size: 1.2em;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-            border: none;
-        }
-
-        .ticket:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
-        }
-
-        .ticket:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-
-        .ticket:disabled:hover {
-            transform: none;
-        }
-
-        .ticket.available {
-            background: linear-gradient(135deg, #10b981, #059669);
-            color: white;
-        }
-
-        .ticket.in-use {
-            background: linear-gradient(135deg, #f59e0b, #d97706);
-            color: white;
-        }
-
-        .ticket.waiting {
-            background: linear-gradient(135deg, #ef4444, #dc2626);
-            color: white;
-        }
-
-        .ticket.returned {
-            background: linear-gradient(135deg, #06b6d4, #0891b2);
-            color: white;
-        }
-
-        .controls {
-            margin-top: 20px;
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-        }
-
-        button {
-            padding: 12px 20px;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 1em;
-            font-weight: bold;
-            transition: all 0.3s ease;
-        }
-
-        .btn-primary {
-            background: #667eea;
-            color: white;
-        }
-
-        .btn-primary:hover:not(:disabled) {
-            background: #5568d3;
-            transform: translateY(-2px);
-        }
-
-        .btn-primary:disabled {
-            background: #ccc;
-            cursor: not-allowed;
-        }
-
-        .btn-secondary {
-            background: #e5e7eb;
-            color: #333;
-        }
-
-        .btn-secondary:hover {
-            background: #d1d5db;
-        }
-
-        .modal {
-            display: none;
-            position: fixed;
-            z-index: 1000;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.5);
-        }
-
-        .modal-content {
-            background-color: white;
-            margin: 5% auto;
-            padding: 30px;
-            border-radius: 10px;
-            width: 90%;
-            max-width: 500px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        }
-
-        .modal-close {
-            color: #aaa;
-            float: right;
-            font-size: 28px;
-            font-weight: bold;
-            cursor: pointer;
-        }
-
-        .modal-close:hover {
-            color: #000;
-        }
-
-        .form-group {
-            margin-bottom: 15px;
-        }
-
-        .form-group label {
-            display: block;
-            margin-bottom: 5px;
-            color: #333;
-            font-weight: bold;
-        }
-
-        .legend {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 15px;
-            margin-top: 20px;
-            padding-top: 20px;
-            border-top: 2px solid #e5e7eb;
-        }
-
-        .legend-item {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .legend-color {
-            width: 30px;
-            height: 30px;
-            border-radius: 4px;
-        }
-
-        .legend-color.available {
-            background: linear-gradient(135deg, #10b981, #059669);
-        }
-
-        .legend-color.in-use {
-            background: linear-gradient(135deg, #f59e0b, #d97706);
-        }
-
-        .legend-color.waiting {
-            background: linear-gradient(135deg, #ef4444, #dc2626);
-        }
-
-        .legend-color.returned {
-            background: linear-gradient(135deg, #06b6d4, #0891b2);
-        }
-
-        .footer {
-            text-align: center;
-            color: #666;
-            margin-top: 30px;
-            padding: 20px;
-        }
-
-        .action-buttons {
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-            margin-top: 15px;
-        }
-
-        .btn-small {
-            padding: 8px 12px;
-            font-size: 0.9em;
-            flex: 1;
-            min-width: 100px;
-        }
-
-        .status-badge {
-            display: inline-block;
-            padding: 8px 16px;
-            border-radius: 20px;
-            font-size: 0.9em;
-            font-weight: bold;
-            margin-top: 10px;
-        }
-
-        .status-badge.accepting {
-            background: #d1fae5;
-            color: #047857;
-        }
-
-        .status-badge.full {
-            background: #fee2e2;
-            color: #991b1b;
-        }
-
-        .waiting-time-note {
-            font-size: 0.75em;
-            color: #666;
-            margin-top: 8px;
-            font-weight: normal;
-        }
-
-        .waiting-time-hidden {
-            display: none;
-        }
-
-        .timing-info {
-            margin-top: 12px;
-            padding: 12px;
-            border: 1px solid #e5e7eb;
-            border-radius: 8px;
-            background: #f9fafb;
-            color: #374151;
-            font-size: 0.9em;
-            line-height: 1.6;
-        }
-
-        .timing-info p {
-            margin: 4px 0;
-        }
-
-        .role-chip {
-            display: inline-block;
-            margin-top: 8px;
-            background: #111827;
-            color: #fff;
-            padding: 6px 10px;
-            border-radius: 9999px;
-            font-size: 12px;
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <header>
-            <h1>🎉 文化祭 整理券管理システム</h1>
-            <p class="subtitle">全25枚の整理券を企画で管理</p>
-            <div class="status-badge" id="statusBadge">
-                🟢 受付中
-            </div>
-            <div id="roleChip" class="role-chip">端末ロール: 未設定</div>
-        </header>
-
-        <div class="stats-container">
-            <div class="stat-card available">
-                <div class="stat-label">受付待ちの整理券</div>
-                <div class="stat-value" id="availableCount">25</div>
-            </div>
-            <div class="stat-card in-use">
-                <div class="stat-label">企画内の整理券</div>
-                <div class="stat-value" id="inUseCount">0</div>
-            </div>
-            <div class="stat-card waiting">
-                <div class="stat-label">待機中の整理券</div>
-                <div class="stat-value" id="waitingCount">0</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-label">回収済みの整理券</div>
-                <div class="stat-value" id="returnedCount">0</div>
-                <span style="color: #06b6d4; font-size: 1.2em;">■</span>
-            </div>
-            <div class="stat-card waiting-time waiting-time-hidden" id="waitingTimeCard">
-                <div class="stat-label">予想待機時間</div>
-                <div class="stat-value" id="waitingTime">約0分</div>
-                <div class="waiting-time-note">企画満員時の目安</div>
-            </div>
-        </div>
-
-        <div class="section">
-            <h2>📋 整理券一覧</h2>
-            <div class="ticket-list" id="ticketList"></div>
-
-            <div class="controls">
-                <button class="btn-secondary" onclick="resetAll()">🔄 リセット</button>
-                <button class="btn-secondary" onclick="resetDeviceRole()">🪪 端末ロール再設定</button>
-            </div>
-
-            <div class="legend">
-                <div class="legend-item">
-                    <div class="legend-color available"></div>
-                    <span>受付待ち</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color in-use"></div>
-                    <span>企画内</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color waiting"></div>
-                    <span>待機中</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color returned"></div>
-                    <span>回収済み</span>
-                </div>
-            </div>
-        </div>
-
-        <div class="footer">
-            <p>© 2026 文化祭実行委員会</p>
-        </div>
-    </div>
-
-    <div id="operationModal" class="modal">
-        <div class="modal-content">
-            <span class="modal-close" onclick="closeOperationModal()">&times;</span>
-            <h2 id="operationTitle">整理券 #<span id="selectedTicketNumber"></span> の操作</h2>
-            <p style="margin-bottom: 20px; color: #666;" id="operationStatus"></p>
-            <div class="timing-info">
-                <p>入場時刻: <span id="inUseAtDisplay">-</span>（経過: <span id="inUseElapsedDisplay">-</span>）</p>
-                <p>待機時刻: <span id="waitingAtDisplay">-</span>（経過: <span id="waitingElapsedDisplay">-</span>）</p>
-            </div>
-            <div class="action-buttons">
-                <button class="btn-primary btn-small" id="btnToInUse" onclick="moveToInUse()">企画に入場</button>
-                <button class="btn-primary btn-small" id="btnToWaiting" onclick="moveToWaiting()">待機へ移動</button>
-                <button class="btn-primary btn-small" id="btnExit" onclick="exitFromInUse()">退場</button>
-                <button class="btn-primary btn-small" id="btnToReturned" onclick="moveToReturned()">回収</button>
-                <button class="btn-secondary btn-small" onclick="closeOperationModal()">キャンセル</button>
-            </div>
-        </div>
-    </div>
-
-    <script>
-        // ===== GAS接続設定 =====
-        const API_URL = 'YOUR_WEBAPP_URL_HERE'; // ← 必ず置換
-
-        // ===== LocalStorage keys =====
-        const STORAGE_KEY = 'festival_tickets_data'; // 互換維持用（現在は主にrole/deviceId）
-        const ROLE_KEY = 'festival_device_role';
-        const DEVICE_ID_KEY = 'festival_device_id';
-
-        const MAX_CAPACITY = 6;
-        const TIME_PER_GROUP = 15;
-
-        let tickets = [];
-        let selectedTicketId = null;
-        let stateVersion = null;
-        let deviceRole = null; // 'reception' | 'goal'
-
-        function createInitialTicket(number) {
-            return {
-                id: number,
-                number,
-                status: 'available',
-                timestamp: new Date(),
-                inUseAt: null,
-                waitingAt: null
-            };
-        }
-
-        function normalizeTicket(ticket) {
-            return {
-                ...ticket,
-                inUseAt: ticket.inUseAt ?? null,
-                waitingAt: ticket.waitingAt ?? null
-            };
-        }
-
-        function formatTicketTime(timestamp) {
-            if (!timestamp) return '-';
-            const date = new Date(timestamp);
-            if (Number.isNaN(date.getTime())) return '-';
-            return date.toLocaleTimeString('ja-JP');
-        }
-
-        function formatElapsedTime(timestamp) {
-            if (!timestamp) return '-';
-            const date = new Date(timestamp);
-            if (Number.isNaN(date.getTime())) return '-';
-
-            const elapsedSeconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
-            const hours = Math.floor(elapsedSeconds / 3600);
-            const minutes = Math.floor((elapsedSeconds % 3600) / 60);
-            const seconds = elapsedSeconds % 60;
-
-            if (hours > 0) return `${hours}時間${minutes}分${seconds}秒`;
-            if (minutes > 0) return `${minutes}分${seconds}秒`;
-            return `${seconds}秒`;
-        }
-
-        function updateTimingInfo(ticket) {
-            document.getElementById('inUseAtDisplay').textContent = formatTicketTime(ticket.inUseAt);
-            document.getElementById('inUseElapsedDisplay').textContent = formatElapsedTime(ticket.inUseAt);
-            document.getElementById('waitingAtDisplay').textContent = formatTicketTime(ticket.waitingAt);
-            document.getElementById('waitingElapsedDisplay').textContent = formatElapsedTime(ticket.waitingAt);
-        }
-
-        function getOrCreateDeviceId() {
-            let deviceId = localStorage.getItem(DEVICE_ID_KEY);
-            if (!deviceId) {
-                deviceId = `ipad-${Math.random().toString(36).slice(2, 10)}`;
-                localStorage.setItem(DEVICE_ID_KEY, deviceId);
-            }
-            return deviceId;
-        }
-
-        function getRole() {
-            const r = localStorage.getItem(ROLE_KEY);
-            return (r === 'reception' || r === 'goal') ? r : null;
-        }
-
-        function setRole(role) {
-            localStorage.setItem(ROLE_KEY, role);
-            deviceRole = role;
-            updateRoleChip();
-        }
-
-        function updateRoleChip() {
-            const chip = document.getElementById('roleChip');
-            if (!chip) return;
-            if (deviceRole === 'reception') chip.textContent = '端末ロール: 受付';
-            else if (deviceRole === 'goal') chip.textContent = '端末ロール: ゴール';
-            else chip.textContent = '端末ロール: 未設定';
-        }
-
-        async function ensureRoleSetup() {
-            const role = getRole();
-            if (role) {
-                deviceRole = role;
-                updateRoleChip();
-                return;
-            }
-
-            const overlay = document.createElement('div');
-            overlay.style.cssText = `
-                position: fixed; inset: 0; background: rgba(0,0,0,.45);
-                display: flex; align-items: center; justify-content: center; z-index: 99999;
-            `;
-            const card = document.createElement('div');
-            card.style.cssText = `
-                width: min(92vw, 440px); background: #fff; border-radius: 16px; padding: 20px;
-                box-shadow: 0 12px 40px rgba(0,0,0,.2);
-            `;
-            card.innerHTML = `
-                <h2 style="margin:0 0 10px;">端末の役割を設定</h2>
-                <p style="margin:0 0 14px; line-height:1.6;">
-                    このiPadが「受付側」か「ゴール側」かを選択してください。<br>
-                    設定はこの端末のLocalStorageに保存されます。
-                </p>
-                <div style="display:grid; gap:10px;">
-                    <button id="btnSetReception" class="btn-primary">受付側に設定</button>
-                    <button id="btnSetGoal" class="btn-primary">ゴール側に設定</button>
-                </div>
-            `;
-            overlay.appendChild(card);
-            document.body.appendChild(overlay);
-
-            await new Promise((resolve) => {
-                document.getElementById('btnSetReception').onclick = () => {
-                    setRole('reception');
-                    overlay.remove();
-                    resolve();
-                };
-                document.getElementById('btnSetGoal').onclick = () => {
-                    setRole('goal');
-                    overlay.remove();
-                    resolve();
-                };
-            });
-        }
-
-        function resetDeviceRole() {
-            if (!confirm('端末ロールを再設定しますか？')) return;
-            localStorage.removeItem(ROLE_KEY);
-            location.reload();
-        }
-
-        // ===== GAS API =====
-        function mapGasStatusToUiStatus(gasStatus) {
-            // GAS: UNISSUED / ISSUED / IN_VENUE / COMPLETED / CANCELED
-            // UI : available / waiting / in-use / returned
-            switch (gasStatus) {
-                case 'UNISSUED': return 'available';
-                case 'ISSUED': return 'waiting';
-                case 'IN_VENUE': return 'in-use';
-                case 'COMPLETED': return 'returned';
-                case 'CANCELED': return 'available';
-                default: return 'available';
-            }
-        }
-
-        function mapUiToTicket(g) {
-            return {
-                id: Number(g.ticketNo),
-                number: Number(g.ticketNo),
-                status: mapGasStatusToUiStatus(g.status),
-                timestamp: g.updatedAt ? new Date(g.updatedAt) : new Date(),
-                inUseAt: g.enteredAt || null,
-                waitingAt: g.issuedAt || null
-            };
-        }
-
-        function assertActionAllowed(action) {
-            // 受付: enterGroup / cancelTicket / getState / resetAll
-            // ゴール: exitGroup / getState
-            if (deviceRole === 'reception') {
-                const allowed = ['getState', 'enterGroup', 'cancelTicket', 'resetAll'];
-                if (!allowed.includes(action)) throw new Error('受付端末ではこの操作はできません');
-            } else if (deviceRole === 'goal') {
-                const allowed = ['getState', 'exitGroup'];
-                if (!allowed.includes(action)) throw new Error('ゴール端末ではこの操作はできません');
-            }
-        }
-
-        async function callApi(action, payload = {}) {
-            assertActionAllowed(action);
-
-            const res = await fetch(API_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action, ...payload })
-            });
-
-            const data = await res.json();
-            if (!data.ok) throw data;
-            return data;
-        }
-
-        async function fetchStateFromServer() {
-            const data = await callApi('getState');
-            stateVersion = data.state.version;
-            tickets = (data.tickets || []).map(mapUiToTicket).map(normalizeTicket);
-            renderAll();
-        }
-
-        function operatorNameInput() {
-            return deviceRole === 'reception' ? '受付端末' : 'ゴール端末';
-        }
-
-        function commonPayload() {
-            return {
-                requestId: crypto.randomUUID(),
-                expectedVersion: stateVersion,
-                operatorName: operatorNameInput(),
-                deviceId: getOrCreateDeviceId()
-            };
-        }
-
-        function handleApiError(err) {
-            const code = err && err.error;
-            if (code === 'VERSION_CONFLICT') {
-                alert('他端末で更新されました。再同期します。');
-                fetchStateFromServer().catch(() => {});
-                return;
-            }
-            if (code === 'CAPACITY_FULL') {
-                alert('現在6組入場中です。退場処理後に再実行してください。');
-                return;
-            }
-            alert(err?.message || '通信エラーが発生しました');
-        }
-
-        // 初期化
-        async function init() {
-            getOrCreateDeviceId();
-            await ensureRoleSetup();
-
-            // 旧LocalStorageは互換維持で残す（使わない）
-            const saved = localStorage.getItem(STORAGE_KEY);
-            if (saved && !getRole()) {
-                // 今回仕様: キャッシュが残っていてもロール未設定なら設定画面表示済み
-            }
-
-            await fetchStateFromServer();
-
-            // 10秒ごと同期
-            setInterval(() => {
-                fetchStateFromServer().catch(() => {});
-            }, 10000);
-        }
-
-        function renderAll() {
-            renderTickets();
-            updateStats();
-        }
-
-        function renderTickets() {
-            const ticketList = document.getElementById('ticketList');
-            ticketList.innerHTML = '';
-
-            tickets.forEach(ticket => {
-                const ticketEl = document.createElement('button');
-                ticketEl.className = `ticket ${ticket.status}`;
-                ticketEl.textContent = ticket.number;
-                ticketEl.onclick = () => selectTicket(ticket.id);
-                ticketList.appendChild(ticketEl);
-            });
-        }
-
-        function calculateWaitingTime(waitingCount) {
-            return Math.ceil(waitingCount * TIME_PER_GROUP);
-        }
-
-        function updateStats() {
-            const availableCount = tickets.filter(t => t.status === 'available').length;
-            const inUseCount = tickets.filter(t => t.status === 'in-use').length;
-            const waitingCount = tickets.filter(t => t.status === 'waiting').length;
-            const returnedCount = tickets.filter(t => t.status === 'returned').length;
-
-            document.getElementById('availableCount').textContent = availableCount;
-            document.getElementById('inUseCount').textContent = inUseCount;
-            document.getElementById('waitingCount').textContent = waitingCount;
-            document.getElementById('returnedCount').textContent = returnedCount;
-
-            const isFull = inUseCount >= MAX_CAPACITY;
-            const waitingTimeCard = document.getElementById('waitingTimeCard');
-            if (isFull && waitingCount > 0) {
-                const waitingTime = calculateWaitingTime(waitingCount);
-                document.getElementById('waitingTime').textContent = `約${waitingTime}分`;
-                waitingTimeCard.classList.remove('waiting-time-hidden');
-            } else {
-                waitingTimeCard.classList.add('waiting-time-hidden');
-            }
-
-            const statusBadge = document.getElementById('statusBadge');
-            if (isFull) {
-                statusBadge.textContent = '🔴 満員 - 受付停止中';
-                statusBadge.className = 'status-badge full';
-            } else {
-                statusBadge.textContent = '🟢 受付中';
-                statusBadge.className = 'status-badge accepting';
-            }
-        }
-
-        function selectTicket(ticketId) {
-            const ticket = tickets.find(t => t.id === ticketId);
-            if (!ticket) return;
-
-            selectedTicketId = ticketId;
-            const inUseCount = tickets.filter(t => t.status === 'in-use').length;
-            const isFull = inUseCount >= MAX_CAPACITY;
-
-            document.getElementById('selectedTicketNumber').textContent = ticket.number;
-
-            const btnToInUse = document.getElementById('btnToInUse');
-            const btnToWaiting = document.getElementById('btnToWaiting');
-            const btnExit = document.getElementById('btnExit');
-            const btnToReturned = document.getElementById('btnToReturned');
-            const operationStatus = document.getElementById('operationStatus');
-
-            btnToInUse.style.display = 'none';
-            btnToWaiting.style.display = 'none';
-            btnExit.style.display = 'none';
-            btnToReturned.style.display = 'none';
-
-            // ロールによる操作制限
-            if (deviceRole === 'goal') {
-                // ゴール端末は退場のみ
-                if (ticket.status === 'in-use') {
-                    btnExit.style.display = 'block';
-                    operationStatus.textContent = '現在のステータス: 企画内（ゴール端末: 退場のみ可）';
-                } else {
-                    operationStatus.textContent = 'ゴール端末では「企画内」の整理券のみ退場できます';
-                }
-            } else {
-                // 受付端末（入場・待機・回収のみ）
-                if (ticket.status === 'available') {
-                    operationStatus.textContent = '現在のステータス: 受付待ち';
-                    if (isFull) {
-                        btnToWaiting.style.display = 'block';
-                    } else {
-                        btnToInUse.style.display = 'block';
-                        btnToWaiting.style.display = 'block';
-                    }
-                } else if (ticket.status === 'in-use') {
-                    operationStatus.textContent = '現在のステータス: 企画内（受付端末では退場不可）';
-                } else if (ticket.status === 'waiting') {
-                    operationStatus.textContent = '現在のステータス: 待機中';
-                    btnToReturned.style.display = 'block';
-                    if (!isFull) {
-                        btnToInUse.style.display = 'block';
-                    }
-                } else if (ticket.status === 'returned') {
-                    operationStatus.textContent = '現在のステータス: 回収済み（操作不可）';
-                }
-            }
-
-            updateTimingInfo(ticket);
-            document.getElementById('operationModal').style.display = 'block';
-        }
-
-        // 企画へ入場 (available|waiting -> in-use)
-        async function moveToInUse() {
-            if (deviceRole !== 'reception') return alert('受付端末のみ実行できます');
-            if (selectedTicketId === null) return;
-            const ticket = tickets.find(t => t.id === selectedTicketId);
-            if (!ticket) return;
-
-            try {
-                if (ticket.status === 'available') {
-                    // available を waiting 扱いにしてから enter
-                    await callApi('enterGroup', { ...commonPayload(), ticketNo: ticket.number });
-                } else if (ticket.status === 'waiting') {
-                    await callApi('enterGroup', { ...commonPayload(), ticketNo: ticket.number });
-                }
-                closeOperationModal();
-                await fetchStateFromServer();
-            } catch (err) {
-                handleApiError(err);
-            }
-        }
-
-        // 待機へ移動 (available -> waiting) = GASでは issueTicket 相当がないため
-        // 現仕様では「特定券をwaiting化」はAPI未実装。運用上は available選択時に入場/回収中心に。
-        async function moveToWaiting() {
-            if (deviceRole !== 'reception') return alert('受付端末のみ実行できます');
-            alert('現在のGAS仕様では「任意券を待機化」は未実装です。必要なら issue/assign API を追加します。');
-        }
-
-        // 退場 (in-use -> returned[UI], GAS: COMPLETED)
-        async function exitFromInUse() {
-            if (deviceRole !== 'goal') return alert('ゴール端末のみ実行できます');
-            if (selectedTicketId === null) return;
-            const ticket = tickets.find(t => t.id === selectedTicketId);
-            if (!ticket || ticket.status !== 'in-use') return;
-
-            try {
-                await callApi('exitGroup', { ...commonPayload(), ticketNo: ticket.number });
-                closeOperationModal();
-                await fetchStateFromServer();
-            } catch (err) {
-                handleApiError(err);
-            }
-        }
-
-        // 回収 (waiting -> available相当の運用) GAS: cancelTicket
-        async function moveToReturned() {
-            if (deviceRole !== 'reception') return alert('受付端末のみ実行できます');
-            if (selectedTicketId === null) return;
-            const ticket = tickets.find(t => t.id === selectedTicketId);
-            if (!ticket) return;
-
-            try {
-                await callApi('cancelTicket', { ...commonPayload(), ticketNo: ticket.number });
-                closeOperationModal();
-                await fetchStateFromServer();
-            } catch (err) {
-                handleApiError(err);
-            }
-        }
-
-        function closeOperationModal() {
-            document.getElementById('operationModal').style.display = 'none';
-            selectedTicketId = null;
-        }
-
-        async function resetAll() {
-            if (deviceRole !== 'reception') return alert('リセットは受付端末のみ実行できます');
-            if (!confirm('すべてのデータをリセットしますか？')) return;
-            try {
-                await callApi('resetAll', { ...commonPayload() });
-                await fetchStateFromServer();
-            } catch (err) {
-                handleApiError(err);
-            }
-        }
-
-        window.onclick = function(event) {
-            const operationModal = document.getElementById('operationModal');
-            if (event.target === operationModal) closeOperationModal();
-        }
-
-        window.addEventListener('load', () => {
-            init().catch((e) => {
-                console.error(e);
-                alert('初期化に失敗しました: ' + (e.message || e.error || JSON.stringify(e)));
-            });
-        });
+        // ページ読み込み時に初期化
+        window.addEventListener('load', init);
     </script>
 </body>
 </html>
